@@ -16,7 +16,6 @@ from pettingzoo.utils.env import (
     ObsDict,
     ActionDict,
 )
-from gymnasium.utils import seeding
 from core.environments.base.agent import GridWorldAgentBase
 from core.environments.utils import ascii_array_to_rgb_array, ascii_array_to_str
 from gymnasium import spaces, logger
@@ -89,16 +88,20 @@ class GridWorldBase:
     def __init__(self):
         """Initialization function.
         """
-        raise NotImplementedError
+        # redefine screen and rectangles
+        self.screen = pygame.Surface(self.resolution)
+        self.rect_grid = [[pygame.Rect(
+            j * self.block_size_w,
+            i * self.block_size_h,
+            self.block_size_w,
+            self.block_size_h,
+        ) for j in range(self.world_shape[1])] for i in range(self.world_shape[0])]
 
     def reinit(self):
         self.rewards = dict(zip(self.agents, [0.0] * len(self.agents)))
         self.terminations = dict(zip(self.agents, [False] * len(self.agents)))
         self.truncations = dict(zip(self.agents, [False] * len(self.agents)))
         self.infos = dict(zip(self.agents, [{}] * len(self.agents)))
-
-    def seed(self, seed=None):
-        self.randomizer, _ = seeding.np_random(seed)
 
     def reset(self, seed: Optional[int] = None):
         """One have to reset all agents, and then get the new observation for each agent
@@ -116,7 +119,7 @@ class GridWorldBase:
             logger.warn("You are calling render method without specifying any render mode.")
             return None
 
-        if (not self.render_on) and (self.render_mode in ['rgb_array', 'human']):
+        if (not self.render_on) and (self.render_mode == 'human'):
             self.enable_render()
 
         view = self.grid_world()
@@ -124,7 +127,8 @@ class GridWorldBase:
             return ascii_array_to_str(ascii_arr=view)
 
         elif self.render_mode == 'rgb_array':
-            return np.array(pygame.surfarray.pixels3d(self.screen)).transpose(axes=(1, 0, 2))
+            rgb_view = np.array(pygame.surfarray.pixels3d(self.screen))
+            return np.transpose(rgb_view, axes=(1, 0, 2))
 
         elif self.render_mode == 'human':
             pygame.display.flip()
@@ -141,32 +145,31 @@ class GridWorldBase:
     def enable_render(self):
         self.screen = pygame.display.set_mode(size=self.resolution)
         self.renderOn = True
-        self.rect_grid = [[pygame.Rect(
-            j * self.block_size_w,
-            i * self.block_size_h,
-            self.block_size_w,
-            self.block_size_h,
-        ) for j in range(self.world_shape[1])] for i in range(self.world_shape[0])]
         self.draw()
 
     def draw(self):
         """For updating self.screen variable
         """
         view = self.grid_world()
-        if self.render_on:
-            for i in range(self.world_shape[0]):
-                for j in range(self.world_shape[1]):
-                    pygame.draw.rect(surface=self.screen, color=self.ascii_color_dict[view[i][j]], rect=self.rect_grid[i][j], width=self.line_width)
+        for i in range(self.world_shape[0]):
+            for j in range(self.world_shape[1]):
+                pygame.draw.rect(surface=self.screen, color=self.ascii_color_dict[view[i][j]], rect=self.rect_grid[i][j], width=self.line_width)
 
     def grid_world(self) -> np.ndarray:
         """This function returns the grid world (state). I set it to be in ascii form. 
         """
         raise NotImplementedError
 
-    def observe(self, agent_id: AgentID) -> spaces.Space:
+    def observe(self, agent: AgentID) -> spaces.Space:
         """Get a dictionary of observations. Usually this is obtained from the state (grid_world)
         """
         raise NotImplementedError
+
+    def observations(self) -> ObsDict:
+        observations = {}
+        for agent in self.agent_dict.keys():
+            observations[agent] = self.observe(agent=agent)
+        return observations
 
     def step(self, actions: ActionDict) -> Tuple[ObsDict, Dict[str, float], Dict[str, bool], Dict[str, bool], Dict[str, dict]]:
         """ (1) update action (2) calculate reward and termination (3) info

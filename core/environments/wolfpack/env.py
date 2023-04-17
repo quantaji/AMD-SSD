@@ -1,4 +1,13 @@
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+)
 from pettingzoo.utils.env import (
     ObsType,
     ActionType,
@@ -7,8 +16,10 @@ from pettingzoo.utils.env import (
     ActionDict,
 )
 
+import pygame
 import numpy as np
 from gymnasium import spaces
+from gymnasium.utils import seeding
 from pettingzoo.utils.env import ParallelEnv
 
 from core.environments.base.gridworld import GridWorldBase
@@ -25,7 +36,7 @@ from core.environments.wolfpack.constants import (
     WOLFPACK_ORIENTATION_BOUNDING_BOX,
     WOLFPACK_AGENT_VIEW_TUNE,
 )
-from core.environments.utils import ascii_list_to_array
+from core.environments.utils import ascii_list_to_array, ascii_array_to_rgb_array
 
 
 class Wolfpack(GridWorldBase):
@@ -47,7 +58,7 @@ class Wolfpack(GridWorldBase):
         randomizer: np.random.Generator,
         r_lone: float = 1.0,
         r_team: float = 5.0,
-        r_prey: float = -0.0,  # the prey also have to learn how to escape, but this value is not revealed in paper
+        r_prey: float = 0.1,  # living reward for prey, this is constantly given
         max_cycles: int = 1024,
     ):
 
@@ -63,9 +74,10 @@ class Wolfpack(GridWorldBase):
 
         self.randomizer = randomizer
 
-    def reset(self, seed: Optional[int] = None):
+        super().__init__()
+
+    def reset(self):
         # reset seed
-        self.seed(seed)
 
         # reset agents
         x, y = np.where(~np.isin(self.base_world, WOLFPACK_NO_ENTRY_STATE))
@@ -158,11 +170,11 @@ class Wolfpack(GridWorldBase):
         dist_2 = np.linalg.norm(self.agent_dict['wolf_2'].position - self.agent_dict['prey'].position, ord=1)
 
         self.reinit()  # reset all rewards etc
+        self.rewards['prey'] = self.r_prey  # give living rewards for prey
+
         if (dist_1 <= 1.0) or (dist_2 <= 1.0):
             # terminates
             self.terminations = dict(zip(self.agents, [True] * len(self.agents)))
-
-            self.rewards['prey'] = self.r_prey
 
             if (dist_1 <= self.CAPTURE_RADIUS) and (dist_2 <= self.CAPTURE_RADIUS):  # cooperative success
                 self.rewards['wolf_1'] = self.r_team
@@ -176,8 +188,45 @@ class Wolfpack(GridWorldBase):
         elif self.num_frames >= self.max_cycles:
             self.truncations = dict(zip(self.agents, [True] * len(self.agents)))
 
+        if self.render_on:
+            pygame.event.pump()
+        self.draw()
+
 
 class WolfpackEnv(ParallelEnv):
+
+    metadata = {
+        "name": "wolfpack",
+        "render_modes": ["human", "rgb_array", "ansi"],
+    }
+
+    observation_shape = (WOLFPACK_OBSERVATION_SHAPE[0], WOLFPACK_OBSERVATION_SHAPE[1], 3)
+
+    def __init__(self, **kwargs) -> None:
+
+        self._kwargs = kwargs
+
+        self.seed()
+
+        self.render_mode = self.env.render_mode
+        self.possible_agents = self.env.agents[:]
+        self.agents = self.env.agents[:]
+
+        # spaces
+        self.observation_spaces = {
+            'wolf_1': spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8),
+            'wolf_2': spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8),
+            'prey': spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8),
+        }
+        self.action_spaces = {
+            'wolf_1': spaces.Discrete(len(WOLFPACK_ACTIONS)),
+            'wolf_2': spaces.Discrete(len(WOLFPACK_ACTIONS)),
+            'prey': spaces.Discrete(len(WOLFPACK_ACTIONS)),
+        }
+
+    def seed(self, seed=None):
+        self.randomizer, seed = seeding.np_random(seed)
+        self.env = Wolfpack(self.randomizer, **self._kwargs)
 
     def reset(
         self,
@@ -185,74 +234,53 @@ class WolfpackEnv(ParallelEnv):
         return_info: bool = False,
         options: Optional[dict] = None,
     ) -> ObsDict:
-        return super().reset(seed, return_info, options)
+        if seed is not None:
+            self.seed(seed=seed)
+        self.env.reset()
+
+        self.agents = self.possible_agents[:]
+
+        return self.env.observations()
+
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
+
+    def action_space(self, agent):
+        return self.action_spaces[agent]
+
+    def step(self, actions: ActionDict) -> Tuple[ObsDict, Dict[str, float], Dict[str, bool], Dict[str, bool], Dict[str, dict]]:
+
+        self.env.step(actions=actions)
+
+        self.agents = []
+        for agent in self.env.terminations.keys():
+            if not self.env.terminations[agent]:
+                self.agents.append(agent)
+
+        return (
+            self.env.observations(),
+            self.env.rewards,
+            self.env.terminations,
+            self.env.truncations,
+            self.env.infos,
+        )
+
+    def close(self):
+        self.env.close()
+
+    def render(self) -> None | np.ndarray | str | List:
+        return self.env.render()
 
 
-# class WolfpackEnv(ParallelEnv):
-
-#     metadata = {
-#         "name": "wolfpack",
-#         "render_modes": ["human", "rgb_array", "ansi"],
-#     }
-#     base_world = ascii_list_to_array(WOLFPACK_MAP)
-#     world_shape = base_world.shape
-
-#     possible_agents = ['wolf_1', 'wolf_2', 'prey']
-#     agents = possible_agents.copy()
-
-#     observation_shape = (WOLFPACK_OBSERVATION_SHAPE[0], WOLFPACK_OBSERVATION_SHAPE[1], 3)
-#     observation_spaces = {
-#         'wolf_1': spaces.Box(low=0, high=255, shape=observation_shape, dtype=np.uint8),
-#         'wolf_2': spaces.Box(low=0, high=255, shape=observation_shape, dtype=np.uint8),
-#         'prey': spaces.Box(low=0, high=255, shape=observation_shape, dtype=np.uint8),
-#     }
-
-#     action_spaces = {
-#         'wolf_1': spaces.Discrete(len(WOLFPACK_ACTIONS)),
-#         'wolf_2': spaces.Discrete(len(WOLFPACK_ACTIONS)),
-#         'prey': spaces.Discrete(len(WOLFPACK_ACTIONS)),
-#     }
-
-#     def __init__(
-#         self,
-#         r_lone: float = 0.5,
-#         r_team: float = 1.0,
-#         max_cycles: int = 1024,
-#     ):
-
-#         self.agent_dict = {}
-#         for agent in self.agents:
-#             self.agent_dict[agent] = WolfpackAgent(agent)
-
-#         self.r_lone = r_lone
-#         self.r_team = r_team
-
-#         self.max_cycles = max_cycles
-
-#     def _reset_agents(self):
-#         x, y = np.where(~np.isin(self.base_world, WOLFPACK_NO_ENTRY_STATE))
-
-#         pos_choice = np.random.choice(
-#             len(x),
-#             size=(len(self.agents), ),
-#             replace=False,
-#         )
-
-#         ori_choice = np.random.choice(
-#             4,
-#             size=(len(self.agents), ),
-#             replace=True,
-#         )
-
-#         for i, agent in enumerate(self.agents):
-#             self.agent_dict[agent].position = [x[pos_choice[i]], y[pos_choice[i]]]
-#             self.agent_dict[agent].orientation = ori_choice[i]
-
-#     def reset(self, seed: Optional[int] = None, return_info: bool = False, options: Optional[dict] = None) -> ObsDict:
-#         np.random.seed(seed)
-#         self._reset_agents()
-#         # get views
-#         raise NotImplementedError
-
-#     def _grid_world(self):
-#         raise NotImplementedError
+def wolfpack_env_creator(config: Dict[str, Any] = {
+    'r_lone': 1.0,
+    'r_team': 5.0,
+    'r_prey': 0.1,
+    'max_cycles': 1024,
+}) -> WolfpackEnv:
+    return WolfpackEnv(
+        r_lone=config['r_lone'],
+        r_team=config['r_team'],
+        r_prey=config['r_prey'],
+        max_cycles=config['max_cycles'],
+    )
