@@ -82,7 +82,7 @@ class GridWorldAgentBase:
         self._orientation = new_ori
 
     def _new_position(self, action: ActionType) -> np.ndarray:
-        new_pos = self.position
+        new_pos = self.position.copy()
         if action in ACTION_POSITION_CHANGE.keys():
             new_pos += ACTION_POSITION_CHANGE[action]
         return new_pos

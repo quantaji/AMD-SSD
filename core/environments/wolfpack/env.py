@@ -144,11 +144,10 @@ class Wolfpack(GridWorldBase):
         """
 
         # act all agent first
-        grid_world = self.grid_world()
         for agent in self.agent_dict.keys():
             self.agent_dict[agent].act(
                 action=actions[agent],
-                grid_world=grid_world,
+                grid_world=self.base_world,
             )  # wolf and prey may went into sampe place, this means termination, two wolf can be at same place
 
         # counter
