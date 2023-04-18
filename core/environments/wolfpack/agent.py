@@ -1,4 +1,4 @@
-from core.environments.base.agent import GridWorldAgentBase
+from ..base.agent import GridWorldAgentBase
 from pettingzoo.utils.env import (
     ActionType,
     AgentID,

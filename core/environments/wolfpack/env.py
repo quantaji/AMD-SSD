@@ -22,9 +22,9 @@ from gymnasium import spaces
 from gymnasium.utils import seeding
 from pettingzoo.utils.env import ParallelEnv
 
-from core.environments.base.gridworld import GridWorldBase
-from core.environments.wolfpack.agent import WolfpackAgent
-from core.environments.wolfpack.constants import (
+from ..base.gridworld import GridWorldBase
+from .agent import WolfpackAgent
+from .constants import (
     WOLFPACK_MAP,
     WOLFPACK_STATE,
     WOLFPACK_COLOR,
@@ -254,7 +254,7 @@ class WolfpackEnv(ParallelEnv):
 
         self.agents = []
         for agent in self.env.terminations.keys():
-            if not self.env.terminations[agent]:
+            if (not self.env.terminations[agent]) and (not self.env.truncations[agent]):
                 self.agents.append(agent)
 
         return (

@@ -16,8 +16,8 @@ from pettingzoo.utils.env import (
     ObsDict,
     ActionDict,
 )
-from core.environments.base.agent import GridWorldAgentBase
-from core.environments.utils import ascii_array_to_rgb_array, ascii_array_to_str
+from .agent import GridWorldAgentBase
+from ..utils import ascii_array_to_rgb_array, ascii_array_to_str
 from gymnasium import spaces, logger
 import pygame
 
