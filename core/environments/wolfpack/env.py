@@ -149,7 +149,7 @@ class Wolfpack(GridWorldBase):
         observation = grid_world[x_min:x_max + 1, y_min:y_max + 1]
         observation = np.rot90(observation, k=ori)
 
-        return observation
+        return ascii_array_to_rgb_array(observation, self.ascii_color_dict)
 
     def step(self, actions: ActionDict):
         """This function only calculates make action, test ending, and calculate reward
@@ -224,6 +224,8 @@ class WolfpackEnv(ParallelEnv):
             'prey': spaces.Discrete(len(WOLFPACK_ACTIONS)),
         }
 
+        self.convert_to_rllib_env: bool = False
+
     def seed(self, seed=None):
         self.randomizer, seed = seeding.np_random(seed)
         self.env = Wolfpack(self.randomizer, **self._kwargs)
@@ -240,7 +242,10 @@ class WolfpackEnv(ParallelEnv):
 
         self.agents = self.possible_agents[:]
 
-        return self.env.observations()
+        if self.convert_to_rllib_env:
+            return self.env.observations(), {}  # in format of observation and info
+        else:
+            return self.env.observations()
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]
@@ -278,9 +283,11 @@ def wolfpack_env_creator(config: Dict[str, Any] = {
     'r_prey': 0.1,
     'max_cycles': 1024,
 }) -> WolfpackEnv:
-    return WolfpackEnv(
+    env = WolfpackEnv(
         r_lone=config['r_lone'],
         r_team=config['r_team'],
         r_prey=config['r_prey'],
         max_cycles=config['max_cycles'],
     )
+    env.convert_to_rllib_env = True
+    return env
