@@ -1,3 +1,13 @@
+"""
+I searched over internet, there is not existing implementation for gridworld agent's action and update
+I learn a lot from https://github.com/vermashresth/sequential_social_dilemma_games/tree/ppo_comm_policy/social_dilemmas/envs and https://github.com/dkkim93/gym-wolfpack/blob/master/gym_env/wolfpack/agent.py
+The key principle is that
+(1) the agent updates its position, orientation, or other internal states, generally using an act() funciton,
+(2) we can put additional process or ever rewrite act function, we can define new function for each custom agent class
+(3) given a grid_world (an ndarray denoting the world state), and predifined viewing scope, the agent should be able to return an observation of the world
+
+further we have to also define the world size and observation size for agent
+"""
 import numpy as np
 from pettingzoo.utils.env import (
     ActionType,
@@ -9,15 +19,6 @@ from typing import (
     List,
 )
 from .constants import (ACTION_POSITION_CHANGE, ACTION_ORIENTATION_CHANGE, ORIENTATION_CHANGE)
-
-# I searched over internet, there is not existing implementation for gridworld agent's action and update
-# I learn a lot from https://github.com/vermashresth/sequential_social_dilemma_games/tree/ppo_comm_policy/social_dilemmas/envs and https://github.com/dkkim93/gym-wolfpack/blob/master/gym_env/wolfpack/agent.py
-# The key principle is that
-# (1) the agent updates its position, orientation, or other internal states, generally using an act() funciton,
-# (2) we can put additional process or ever rewrite act function, we can define new function for each custom agent class
-# (3) given a grid_world (an ndarray denoting the world state), and predifined viewing scope, the agent should be able to return an observation of the world
-
-# further we have to also define the world size and observation size for agent
 
 
 class GridWorldAgentBase:

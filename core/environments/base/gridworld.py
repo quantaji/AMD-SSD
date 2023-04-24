@@ -1,3 +1,26 @@
+"""
+the axes look like
+graphic is here to help me get my head in order
+WARNING: increasing array position in the direction of down
+so for example if you move_left when facing left
+your y position decreases.
+-       ^       +
+        |
+        U
+        P
+<--LEFT*RIGHT---->
+        D
+        O
+        W
+        N
++       |
+this follows the rules of PIL and openCV, where (0, 0) stands for top-left
+[x, _] is up-to-down axis, [_, y] is left-to-right axis
+
+I choose to use pettingzoo for following reasons:
+(1) pettingzoo.test.api_test can help test the env
+(2) rllib can convert pettingzoo env to rllib env
+"""
 import numpy as np
 from typing import (
     Any,
@@ -17,51 +40,29 @@ from pettingzoo.utils.env import (
     ActionDict,
 )
 from .agent import GridWorldAgentBase
-from ..utils import ascii_array_to_rgb_array, ascii_array_to_str
+from ..utils import ascii_dict_to_color_array, ascii_array_to_str
 from gymnasium import spaces, logger
 import pygame
 
-# the axes look like
-# graphic is here to help me get my head in order
-# WARNING: increasing array position in the direction of down
-# so for example if you move_left when facing left
-# your y position decreases.
-# -       ^       +
-#         |
-#         U
-#         P
-# <--LEFT*RIGHT---->
-#         D
-#         O
-#         W
-#         N
-# +       |
-# this follows the rules of PIL and openCV, where (0, 0) stands for top-left
-# [x, _] is up-to-down axis, [_, y] is left-to-right axis
-
-# I choose to use pettingzoo for following reasons:
-# (1) pettingzoo.test.api_test can help test the env
-# (2) rllib can convert pettingzoo env to rllib env
-
 
 class GridWorldBase:
+    """a grid world environment have four different descriptions of the world
 
-    # a grid world environment have four different descriptions of the world
+    (1) base_world: the fixed position, like walls, this is fixed at the beginning of the game or through the game. This is referred as base_world in the code, it is in ascii form, meaning that is is an np.ndarray of string/char
+    (2) grid_world: this include the agents (players, prey, predator, etc). This is also in ascii format, referred as grid_world in the code, and also add some effect of color, for example, lighten of color in orientation
+    (3) agent_observation: add some other color effects, or croped observation, like other agent and myself.
 
-    # (1) base_world: the fixed position, like walls, this is fixed at the beginning of the game or through the game. This is referred as base_world in the code, it is in ascii form, meaning that is is an np.ndarray of string/char
-    # (2) grid_world: this include the agents (players, prey, predator, etc). This is also in ascii format, referred as grid_world in the code, and also add some effect of color, for example, lighten of color in orientation
-    # (3) agent_observation: add some other color effects, or croped observation, like other agent and myself.
+    I think the observation of agent is also rgb image, so it can use grid_img or grid_world as well
 
-    # I think the observation of agent is also rgb image, so it can use grid_img or grid_world as well
-
-    # Now I know there are a few major block for writing an environment
-    # (1) rules and updates
-    # (2) how to observe, render to figure
+    Now I know there are a few major block for writing an environment
+    (1) rules and updates
+    (2) how to observe, render to figure"""
 
     # world related
     base_world: np.ndarray
     world_shape: Tuple[int, int]
     ascii_color_dict: Dict[str, Tuple[int, int, int]]  # an ascii string, e.g. ' ', '@', denoting a grid's state, map to a RGB color [0-255, 0-255, 0-255]
+    ascii_color_array = np.ndarray
 
     # agent and action related
     agents: List[AgentID]

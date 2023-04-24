@@ -36,7 +36,7 @@ from .constants import (
     WOLFPACK_ORIENTATION_BOUNDING_BOX,
     WOLFPACK_AGENT_VIEW_TUNE,
 )
-from core.environments.utils import ascii_list_to_array, ascii_array_to_rgb_array
+from core.environments.utils import ascii_list_to_array, ascii_array_to_rgb_array, ascii_dict_to_color_array
 
 
 class Wolfpack(GridWorldBase):
@@ -44,6 +44,7 @@ class Wolfpack(GridWorldBase):
     base_world = ascii_list_to_array(WOLFPACK_MAP)
     world_shape = base_world.shape
     ascii_color_dict = WOLFPACK_COLOR
+    ascii_color_array = ascii_dict_to_color_array(ascii_color_dict)
 
     resolution = [640, 640]
     block_size_h, block_size_w = 32, 32
@@ -149,7 +150,7 @@ class Wolfpack(GridWorldBase):
         observation = grid_world[x_min:x_max + 1, y_min:y_max + 1]
         observation = np.rot90(observation, k=ori)
 
-        return ascii_array_to_rgb_array(observation, self.ascii_color_dict)
+        return ascii_array_to_rgb_array(observation, self.ascii_color_array)
 
     def step(self, actions: ActionDict):
         """This function only calculates make action, test ending, and calculate reward
@@ -206,6 +207,8 @@ class WolfpackEnv(ParallelEnv):
 
         self._kwargs = kwargs
 
+        self.env: Wolfpack
+
         self.seed()
 
         self.render_mode = self.env.render_mode
@@ -249,6 +252,9 @@ class WolfpackEnv(ParallelEnv):
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]
+
+    def state(self) -> np.ndarray:
+        return ascii_array_to_rgb_array(self.env.grid_world, self.env.ascii_color_array)
 
     def action_space(self, agent):
         return self.action_spaces[agent]
