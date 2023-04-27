@@ -31,15 +31,25 @@ from torch.func import jacrev, functional_call
 
 logger = logging.getLogger(__name__)
 
+from gymnasium import spaces
+from gymnasium.vector.utils import concatenate, create_empty_array
+import numpy as np
+
 
 class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
     """Pytorch policy class used for Adaptive Mechanism design."""
 
-    def __init__(self, observation_space, action_space, config):
-        super().__init__(observation_space, action_space, config)
-        self.config['policy_param'] = 'neural'
-
     model: nn.Module
+
+    agent_info_space: spaces.Space  # used for agent to collect reward from central planner
+
+    def __init__(self, observation_space, action_space, config):
+        # TODO remove this: put it into config
+
+        super().__init__(observation_space, action_space, config)
+
+        # TODO remove this: put it into config
+        self.config['policy_param'] = 'neural'
 
     def postprocess_trajectory(
         self,
@@ -54,7 +64,21 @@ class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
 
         self.config['policy_param'] = 'neural'  # ! For testing
 
-        # ! STEP 2: get awareness, depending on algorithm's parameterizaiton assumption, whether it is neural param, or softmax parameterization
+        return sample_batch
+
+    def preprocess_batch_before_learning(
+        self,
+        sample_batch: SampleBatch,
+        other_agent_batches: Dict[Any, SampleBatch] | None = None,
+        episode: Episode | None = None,
+    ) -> SampleBatch:
+        sample_batch = super().postprocess_trajectory(sample_batch)
+
+        raise NotImplementedError
+
+        self.config['policy_param'] = 'neural'  # ! For testing
+
+        # ! STEP 1: get awareness, depending on algorithm's parameterizaiton assumption, whether it is neural param, or softmax parameterization
         # get ready for calculating awareness
         copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
         awareness = torch.zeros(copied_batch[SampleBatch.REWARDS].shape, device=self.device)
@@ -103,10 +127,13 @@ class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
             raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
 
         sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
+
         return sample_batch
 
 
 class AMDPlannerTorchPolicy(LearningRateSchedule, TorchPolicyV2):
     """Pytorch policy class used for Adaptive Mechanism design."""
+
+    central_planner_info_space: spaces.Space  # used for central planner to organized infos
 
     pass

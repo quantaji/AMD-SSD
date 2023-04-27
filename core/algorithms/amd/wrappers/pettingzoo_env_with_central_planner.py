@@ -12,7 +12,9 @@ from gymnasium.spaces import Space
 from pettingzoo.utils.env import ParallelEnv
 from pettingzoo.utils.env import ObsType, ActionType, AgentID, ObsDict, ActionDict
 
-from .amd import PreLearningProcessing
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
+
+from ..amd import PreLearningProcessing
 
 
 class ParallelEnvWithCentralPlanner(ParallelEnv):
@@ -22,7 +24,8 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
 
     possible_individual_agents: List[str]
 
-    convert_to_rllib_env: bool = False
+    # this is used for algorithm to organize infos into other stuff
+    central_planner_info_space: Space
 
     def __init__(self, env: ParallelEnv):
         super().__init__()
@@ -113,38 +116,12 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
         reward[self.CENTRAL_PLANNER] = 0.0  # central planner does not need reward
 
         # get the termination and truncation of each agent
-        cp_term = True
-        cp_trunc = True
-        avail = {}
-        for agent_id in self.possible_individual_agents:
-            if (agent_id in trunc.keys()):
-                avail[agent_id] = True
-                # the logic is as long as there are player on the game, the central planner does not truncate or terminate
-                if not term[agent_id]:
-                    cp_term = False
-                if not trunc[agent_id]:
-                    cp_trunc = False
-            else:
-                avail[agent_id] = False
-        term[self.CENTRAL_PLANNER] = cp_term
-        trunc[self.CENTRAL_PLANNER] = cp_trunc
-
-        # add availability to central planner's info
-        infos[self.CENTRAL_PLANNER] = {}
-        infos[self.CENTRAL_PLANNER][PreLearningProcessing.AVAILABILITY] = avail
-
-        # add planner's reward to planner's info
-        act_cp_unflatten = gymnasium.spaces.unflatten(self.central_planner_action_space_unflattened, actions[self.CENTRAL_PLANNER])
-        infos[self.CENTRAL_PLANNER][PreLearningProcessing.R_PLANNER] = act_cp_unflatten
-
-        # add planner's reward to individual's info
-        for agent_id in infos.keys():
-            if agent_id in act_cp_unflatten.keys():
-                infos[agent_id][PreLearningProcessing.R_PLANNER] = act_cp_unflatten[agent_id]
+        term[self.CENTRAL_PLANNER] = all(term.values())
+        trunc[self.CENTRAL_PLANNER] = all(trunc.values())
 
         # update living agents
         self.agents = self.env.agents.copy()
-        if (not cp_term) and (not cp_trunc):
+        if (not term[self.CENTRAL_PLANNER]) and (not trunc[self.CENTRAL_PLANNER]):
             self.agents.append(self.CENTRAL_PLANNER)
 
         return obs, reward, term, trunc, infos

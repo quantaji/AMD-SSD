@@ -29,6 +29,8 @@ from ray.rllib.utils.metrics import (
 )
 from ray.rllib.policy.sample_batch import SampleBatch
 
+
+
 if TYPE_CHECKING:
     from ray.rllib.core.rl_module import RLModule
 
@@ -40,7 +42,7 @@ class PreLearningProcessing:
 
     AWARENESS = "agent_awareness"
     R_PLANNER = "reward_by_planner"
-    AVAILABILITY = 'availability' # used for central planner to get only the agent's reward when it is not terminated 
+    AVAILABILITY = 'availability'  # used for central planner to get only the agent's reward when it is not terminated
 
 
 class AMDAgentPolicy(Policy):

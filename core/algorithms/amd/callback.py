@@ -18,21 +18,6 @@ class AMDAgentWarenessCallback(DefaultCallbacks):
         3. forward these to central planner and get the planner's rewards r_planner, and update each single agent's sample batch
     """
 
-    # def on_postprocess_trajectory(
-    #     self,
-    #     *,
-    #     worker: RolloutWorker,
-    #     episode,
-    #     agent_id: AgentID,
-    #     policy_id: PolicyID,
-    #     policies,
-    #     postprocessed_batch: SampleBatch,
-    #     original_batches,
-    #     **kwargs,
-    # ) -> None:
-    #     print('*****-----', original_batches, postprocessed_batch)
-    #     pass
-
     def on_sample_end(self, *, worker: RolloutWorker, samples: SampleBatch, **kwargs) -> None:
 
         # ! STEP 1: get each agent's awareness at each timestep
@@ -45,8 +30,10 @@ class AMDAgentWarenessCallback(DefaultCallbacks):
                     '-----*****-----',
                     pid,
                     batch,
-                    type(batch[SampleBatch.OBS]),
-                    type(batch[PreLearningProcessing.AWARENESS]),
+                    batch[SampleBatch.T],
+                    # batch[SampleBatch.EPS_ID],
+                    # batch[SampleBatch.UNROLL_ID],
+                    # batch[PreLearningProcessing.R_PLANNER]
                 )
                 policy.config['policy_param'] = 'neural'
         else:
@@ -57,6 +44,6 @@ class AMDAgentWarenessCallback(DefaultCallbacks):
 
         # TODO ! STEP 2: Generate obs for central planner, and get each agent's awareness as a dict.
 
-        raise NotImplementedError
+        # raise NotImplementedError
 
         # TODO ! STEP 3: update each single agent's sample batch
