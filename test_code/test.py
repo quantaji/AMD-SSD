@@ -11,11 +11,15 @@ from torch import nn
 import torch
 import gymnasium as gym
 import numpy as np
+from gymnasium import spaces
 
 module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
     sys.path.append(module_path)
 from core.environments.wolfpack.env import wolfpack_env_creator
+from core.algorithms.amd.callback import AMDAgentWarenessCallback
+from core.algorithms.amd.amd_torch_policy import AMDAgentTorchPolicy
+from core.algorithms.amd.amd import AMDConfig, AMD
 
 
 class SimpleMLPModelV2(TorchModelV2, nn.Module):
@@ -70,8 +74,15 @@ if __name__ == "__main__":
 
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
+    policy_spect = (
+        AMDAgentTorchPolicy,
+        spaces.Box(low=0, high=255, shape=(11, 17, 3), dtype=np.uint8),
+        spaces.Discrete(6),
+        {},
+    )
+
     config = (
-        PGConfig().environment(env=env_name, clip_actions=True).rollouts(num_rollout_workers=4, rollout_fragment_length=128).training(
+        AMDConfig().environment(env=env_name, clip_actions=True).rollouts(num_rollout_workers=4, rollout_fragment_length=128).training(
             model={
                 "custom_model": "SimpleMLPModelV2",
                 # Extra kwargs to be passed to your model's c'tor.
@@ -84,13 +95,13 @@ if __name__ == "__main__":
             num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
             num_cpus_per_worker=3,
         ).multi_agent(
-            policies=['wolf_1', 'wolf_2', 'prey'],
+            policies=['wolf_1', 'wolf_2', 'prey', 'central_planner'],
             policy_mapping_fn=(lambda agent_id, *args, **kwargs: agent_id),
-        ))
+        ).callbacks(AMDAgentWarenessCallback))
 
     tune.run(
-        "PG",
-        name="policy_gradient_baseline",
+        AMD,
+        name="test_of_amd",
         stop={"timesteps_total": 5000000},
         checkpoint_freq=10,
         local_dir="~/ray_results/" + env_name,

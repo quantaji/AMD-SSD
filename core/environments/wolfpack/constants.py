@@ -59,6 +59,7 @@ WOLFPACK_NO_ENTRY_STATE = [
     '&',
 ]
 
+WOLFPACK_STATE_SHAPE = (20, 20)
 WOLFPACK_OBSERVATION_SHAPE = (11, 17)
 WOLFPACK_ORIENTATION_BOUNDING_BOX = {  # x_min, x_max, y_min, y_max offset
     0: [-10, 0, -8, +8],  # up

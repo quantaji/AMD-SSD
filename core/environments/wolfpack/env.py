@@ -27,6 +27,7 @@ from .agent import WolfpackAgent
 from .constants import (
     WOLFPACK_MAP,
     WOLFPACK_STATE,
+    WOLFPACK_STATE_SHAPE,
     WOLFPACK_COLOR,
     WOLFPACK_ORIENTATION_TUNE,
     WOLFPACK_NO_ENTRY_STATE,
@@ -202,6 +203,7 @@ class WolfpackEnv(ParallelEnv):
     }
 
     observation_shape = (WOLFPACK_OBSERVATION_SHAPE[0], WOLFPACK_OBSERVATION_SHAPE[1], 3)
+    state_shape = (WOLFPACK_STATE_SHAPE[0], WOLFPACK_STATE_SHAPE[1], 3)
 
     def __init__(self, **kwargs) -> None:
 
@@ -226,8 +228,7 @@ class WolfpackEnv(ParallelEnv):
             'wolf_2': spaces.Discrete(len(WOLFPACK_ACTIONS)),
             'prey': spaces.Discrete(len(WOLFPACK_ACTIONS)),
         }
-
-        self.convert_to_rllib_env: bool = False
+        self.state_space = spaces.Box(low=0, high=255, shape=self.state_shape, dtype=np.uint8),
 
     def seed(self, seed=None):
         self.randomizer, seed = seeding.np_random(seed)
@@ -245,8 +246,8 @@ class WolfpackEnv(ParallelEnv):
 
         self.agents = self.possible_agents[:]
 
-        if self.convert_to_rllib_env:
-            return self.env.observations(), {}  # in format of observation and info
+        if return_info:
+            return self.env.observations(), {}
         else:
             return self.env.observations()
 
@@ -295,5 +296,12 @@ def wolfpack_env_creator(config: Dict[str, Any] = {
         r_prey=config['r_prey'],
         max_cycles=config['max_cycles'],
     )
-    env.convert_to_rllib_env = True
     return env
+
+
+wolfpack_env_default_config: Dict[str, Any] = {
+    'r_lone': 1.0,
+    'r_team': 5.0,
+    'r_prey': 0.1,
+    'max_cycles': 1024,
+}
