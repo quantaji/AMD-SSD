@@ -66,21 +66,22 @@ if __name__ == "__main__":
 
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
-
     env_name = 'wolfpack'
-    config_template = {
-        'r_lone': 1.0,
-        'r_team': 100.0,
-        'r_prey': 0.00,
-        'max_cycles': 1024,
-    }
-    # register_env(env_name, lambda config: PettingZooEnv(wolfpack_env_creator(config_template)))
-    register_env(env_name, lambda config: P2M(wolfpack_env_creator(config_template)))
 
+    register_env(env_name, lambda config: P2M(wolfpack_env_creator(config)))
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
     config = (
-        AMDConfig().environment(env=env_name, clip_actions=True).rollouts(num_rollout_workers=4, rollout_fragment_length=128).training(
+        AMDConfig().environment(
+            env=env_name,
+            env_config={
+                'r_lone': 1.0,
+                'r_team': 5.0,
+                'r_prey': 0.001,
+                'max_cycles': 1024,
+            },
+            clip_actions=True,
+        ).rollouts(num_rollout_workers=4, rollout_fragment_length=128).training(
             model={
                 "custom_model": "SimpleMLPModelV2",
                 # Extra kwargs to be passed to your model's c'tor.
@@ -90,18 +91,13 @@ if __name__ == "__main__":
             lr=2e-5,
             gamma=0.99,
             coop_agent_list=['wolf_1', 'wolf_2'],
-            planner_reward_max=0.5,
-            force_zero_sum=False,
-            param_assumption='softmax',
+            planner_reward_max=0.1,
+            force_zero_sum=True,
+            param_assumption='neural',
         ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
             num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
             num_cpus_per_worker=3,
         ))
-
-    # print(config.get_multi_agent_setup())
-
-    # print(config.is_multi_agent())
-    # print(config.to_dict().keys())
 
     tune.run(
         AMD,

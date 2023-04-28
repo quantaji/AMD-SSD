@@ -23,3 +23,4 @@ tensorboard
 jupyterlab
 pandas
 opencv-python # for rendering video
+gputil

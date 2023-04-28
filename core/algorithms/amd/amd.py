@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import time
 from typing import Any, Callable, Dict, List, Optional, Type, Union, TYPE_CHECKING, Tuple
 from ray.rllib.algorithms.a3c.a3c import A3CConfig
 from ray.rllib.env.env_context import EnvContext
@@ -36,6 +37,7 @@ from ray.rllib.utils.metrics import (
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.models.action_dist import ActionDistribution
+from ray.rllib.evaluation.rollout_worker import RolloutWorker
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.utils.typing import (
     AgentID,
@@ -167,11 +169,11 @@ class AMDConfig(A3CConfig):
 
         # ! STEP 1: get the total class of policy
         # first if there is no central planner, turn the env into one with central planner
-
-        env = (env or get_env_example(self))
+        # if env is none, we should return the multiagent version of env!!!
+        env = (env or MultiAgentEnvWithCentralPlanner(get_env_example(self)))
         assert isinstance(env, MultiAgentEnv), "The current code only supports multiagent env!"
         env: MultiAgentEnv
-        # we also assume that the env already has a central planner
+
         # if no given policy, use all agent ids
         policies = policies or env.get_agent_ids()
 
@@ -216,7 +218,7 @@ class AMD(A3C):
     @override(A3C)
     def training_step(self) -> ResultDict:
 
-        # this part is copied from original code, and also used by policy gradient
+        # NOTE: this part is copied from original code, and also used by policy gradient
         train_batch: SampleBatch
         if self.config.count_steps_by == "agent_steps":
             train_batch = synchronous_parallel_sample(worker_set=self.workers, max_agent_steps=self.config.train_batch_size)
@@ -225,44 +227,59 @@ class AMD(A3C):
         train_batch = train_batch.as_multi_agent()
         self._counters[NUM_AGENT_STEPS_SAMPLED] += train_batch.agent_steps()
         self._counters[NUM_ENV_STEPS_SAMPLED] += train_batch.env_steps()
+        # NOTE: copy end
 
+        # NOTE: this is the start of my own code
         # for conviniency
         worker = self.workers.local_worker()
         policy_map = worker.policy_map
 
         # compute awareness
-        for policy_id in self.config["coop_agent_list"]:
-            if policy_id in policy_map.keys():
-                policy_map[policy_id].compute_awareness(train_batch[policy_id])
+        if train_batch.agent_steps() > 0:
+            for policy_id in self.config["coop_agent_list"]:
+                if policy_id in policy_map.keys():
+                    policy_map[policy_id].compute_awareness(train_batch[policy_id])
 
-        train_batch = self.prelearning_process_trajectory(train_batch)
-        print(train_batch)
-        for policy_id, batch in train_batch.policy_batches.items():
-            print(
-                policy_id,
-                'r_planner',
-                # batch[PreLearningProcessing.R_PLANNER],
-                batch[PreLearningProcessing.R_PLANNER].shape,
-            )
-            if policy_id == CENTRAL_PLANNER:
-                print(
-                    policy_id,
-                    'avail',
-                    # batch[PreLearningProcessing.AVAILABILITY],
-                    batch[PreLearningProcessing.AVAILABILITY].shape,
-                    'aware',
-                    # batch[PreLearningProcessing.AWARENESS],
-                    batch[PreLearningProcessing.AWARENESS].shape,
-                )
+            train_batch = self.prelearning_process_trajectory(train_batch)
+        # NOTE: this is the end of my own code
+
+        # NOTE: this is the start of copied code
+        train_results = {}
+        if train_batch.agent_steps() > 0:
+            # Use simple optimizer (only for multi-agent or tf-eager; all other
+            # cases should use the multi-GPU optimizer, even if only using 1 GPU).
+            # TODO: (sven) rename MultiGPUOptimizer into something more
+            #  meaningful.
+            if self.config._enable_rl_trainer_api:
+                train_results = self.trainer_runner.update(train_batch)
+            elif self.config.get("simple_optimizer") is True:
+                train_results = train_one_step(self, train_batch)
             else:
-                print(
-                    policy_id,
-                    'aware',
-                    # batch[PreLearningProcessing.AWARENESS],
-                    batch[PreLearningProcessing.AWARENESS].shape,
-                )
+                train_results = multi_gpu_train_one_step(self, train_batch)
+        else:
+            # Wait 1 sec before probing again via weight syncing.
+            time.sleep(1)
 
-        raise NotImplementedError
+        # Update weights and global_vars - after learning on the local worker - on all
+        # remote workers (only those policies that were actually trained).
+        global_vars = {
+            "timestep": self._counters[NUM_ENV_STEPS_SAMPLED],
+        }
+        with self._timers[SYNCH_WORKER_WEIGHTS_TIMER]:
+            # TODO (Avnish): Implement this on trainer_runner.get_weights().
+            # TODO (Kourosh): figure out how we are going to sync MARLModule
+            # weights to MARLModule weights under the policy_map objects?
+            from_worker = None
+            if self.config._enable_rl_trainer_api:
+                from_worker = self.trainer_runner
+            self.workers.sync_weights(
+                from_worker=from_worker,
+                policies=list(train_results.keys()),
+                global_vars=global_vars,
+            )
+        # NOTE: copy end
+
+        return train_results
 
     def prelearning_process_trajectory(self, train_batch: SampleBatch):
         """This fucntion organizes train batch"""

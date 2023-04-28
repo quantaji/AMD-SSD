@@ -161,7 +161,6 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         # Compute a value function loss.
         if self.config["use_critic"]:
             value_loss = 0.5 * torch.sum(torch.pow(values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS], 2.0))
-
         else:  # Ignore the value function.
             value_loss = 0.0
 
@@ -228,3 +227,33 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
 
             return sample_batch
+
+    def loss_central_planner(
+        self,
+        model: ModelV2,
+        dist_class: ActionDistribution,
+        train_batch: SampleBatch,
+    ) -> TensorType | List[TensorType]:
+
+        # Pass the training data through our model to get distribution parameters.
+        dist_inputs, _ = model(train_batch)
+
+        # Create an action distribution object.
+        action_dist = dist_class(dist_inputs, model)
+
+        # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
+        log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])  # shape (Batch, )
+
+        # the effective reward is availability x awareness x r_planner
+        r_eff = (train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.AWARENESS] * train_batch[PreLearningProcessing.R_PLANNER]).sum(axis=-1)
+
+        # Final policy loss.
+        policy_loss = -torch.mean(log_probs * r_eff)
+
+        # currently the total cost of reward is an average over all episode I don't know how to pass gradient
+        reward_cost = (((train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.R_PLANNER])**2).sum(axis=-1)**0.5).mean()
+
+        model.tower_stats["planner_policy_loss"] = policy_loss
+        model.tower_stats["planner_reward_cost"] = reward_cost
+
+        return policy_loss
