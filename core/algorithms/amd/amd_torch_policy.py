@@ -248,7 +248,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         r_eff = (train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.AWARENESS] * train_batch[PreLearningProcessing.R_PLANNER]).sum(axis=-1)
 
         # Final policy loss.
-        policy_loss = -torch.mean(log_probs * r_eff)
+        policy_loss = -torch.mean(log_probs * r_eff) * self.config['agent_pseudo_lr']
 
         # currently the total cost of reward is an average over all episode I don't know how to pass gradient
         reward_cost = (((train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.R_PLANNER])**2).sum(axis=-1)**0.5).mean()
