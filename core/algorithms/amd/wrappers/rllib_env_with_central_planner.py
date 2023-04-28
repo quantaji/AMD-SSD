@@ -18,28 +18,28 @@ from ray.rllib.utils.typing import MultiAgentDict
 
 from copy import deepcopy
 
-from ..amd import PreLearningProcessing
+from ..constants import PreLearningProcessing, CENTRAL_PLANNER
 
 STATE_SPACE = 'state_space'
 
 
 class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
 
-    CENTRAL_PLANNER: str = 'central_planner'
+    CENTRAL_PLANNER: str = CENTRAL_PLANNER
     observation_space: Optional[spaces.Dict] = None
     action_space: Optional[spaces.Dict] = None
     _agent_ids: set[str]
     _individual_agent_ids: set[str]
-    central_planner_state_space_unflattend: Space
+    central_planner_observation_space_unflattened: Space
 
     def __init__(self, env: MultiAgentEnv):
+
+        assert isinstance(env, MultiAgentEnv), 'The environment must be a MultiAgentEnv'
 
         self.env: MultiAgentEnv = env
         self.env.reset()
 
-        # make sure central planner's id is correct
-        while self.CENTRAL_PLANNER in self.env.get_agent_ids():
-            self.CENTRAL_PLANNER = self.CENTRAL_PLANNER + '_'
+        # the name of central planner is always 'central_planner
 
         # try if the env have .state() function, if so, the central planner takes the sate, otherwise it returns a flattened dict
         self.have_state = hasattr(self.env, STATE_SPACE) and hasattr(self.env, ENV_STATE) and callable(getattr(self.env, ENV_STATE))
@@ -62,11 +62,21 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
 
         # add observation space
         if self.have_state:
-            self.central_planner_state_space_unflattend = getattr(self.env, STATE_SPACE)
+            self.central_planner_observation_space_unflattened = getattr(self.env, STATE_SPACE)
             self.observation_space[self.CENTRAL_PLANNER] = getattr(self.env, STATE_SPACE)
         else:
-            self.central_planner_state_space_unflattend = spaces.Dict(self.observation_space)
-            self.observation_space[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_state_space_unflattend)
+            self.central_planner_observation_space_unflattened = spaces.Dict(self.observation_space)
+            self.observation_space[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_observation_space_unflattened)
+
+        # add action space, the reward by planner
+        cp_action_space = {}
+        for agent_id in self.env.get_agent_ids():
+            cp_action_space[agent_id] = spaces.Box(low=-1.0, high=1.0, shape=(1, ))
+        self.central_planner_action_space_unflattened = spaces.Dict(cp_action_space)
+        self.action_space[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_action_space_unflattened)
+
+        self._obs_space_in_preferred_format = self._check_if_obs_space_maps_agent_id_to_sub_space()
+        self._action_space_in_preferred_format = self._check_if_action_space_maps_agent_id_to_sub_space()
 
         super().__init__()
 
@@ -81,7 +91,7 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
                 else:
                     obs_cp[agent_id] = create_empty_array(self.observation_space[agent_id])
 
-            return spaces.flatten(self.central_planner_state_space_unflattend, obs_cp)
+            return spaces.flatten(self.central_planner_observation_space_unflattened, obs_cp)
 
     def reset(
         self,

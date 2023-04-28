@@ -14,7 +14,7 @@ from pettingzoo.utils.env import ObsType, ActionType, AgentID, ObsDict, ActionDi
 
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
 
-from ..amd import PreLearningProcessing
+from ..constants import PreLearningProcessing
 
 STATE_SPACE = 'state_space'
 
@@ -27,7 +27,8 @@ class MultiAgentEnvFromPettingZooParallel(MultiAgentEnv):
         self.par_env.reset()
 
         self.observation_space = spaces.Dict(self.par_env.observation_spaces)
-        self.action_space = spaces.Dict(self.par_env.observation_spaces)
+        self._check_if_action_space_maps_agent_id_to_sub_space
+        self.action_space = spaces.Dict(self.par_env.action_spaces)
         self._agent_ids = set(self.par_env.possible_agents)
 
         # see if state is callable
@@ -40,6 +41,9 @@ class MultiAgentEnvFromPettingZooParallel(MultiAgentEnv):
         # see if it specifies state space
         if hasattr(self.par_env, STATE_SPACE) and isinstance(getattr(self.par_env, STATE_SPACE), Space):
             self.state_space = getattr(self.par_env, STATE_SPACE)
+
+        self._obs_space_in_preferred_format = self._check_if_obs_space_maps_agent_id_to_sub_space()
+        self._action_space_in_preferred_format = self._check_if_action_space_maps_agent_id_to_sub_space()
 
         super().__init__()
 

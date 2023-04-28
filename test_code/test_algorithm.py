@@ -16,9 +16,8 @@ module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
     sys.path.append(module_path)
 from core.environments.wolfpack.env import wolfpack_env_creator
-from core.algorithms.amd.callback import AMDAgentWarenessCallback
-from core.algorithms.amd.amd_torch_policy import AMDAgentTorchPolicy
-from core.algorithms.amd.amd import AMDConfig, AMD, PreLearningProcessing
+# from core.algorithms.amd.amd_torch_policy import AMDAgentTorchPolicy
+from core.algorithms.amd.amd import AMDConfig, AMD
 from core.algorithms.amd.wrappers import ParallelEnvWithCentralPlanner as PEnvCP, MultiAgentEnvFromPettingZooParallel as P2M, MultiAgentEnvWithCentralPlanner as MEnvCP
 from ray.rllib.policy.policy import PolicySpec
 
@@ -31,6 +30,7 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
         self.flattened_obs_space = spaces.flatten_space(obs_space)
         self.obs_space = obs_space
+        self.action_space = act_space
 
         self.model = nn.Sequential(
             nn.Flatten(start_dim=1, end_dim=-1),
@@ -50,6 +50,9 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
     def forward(self, input_dict, state, seq_lens):
         # print('-----*****-----*****-----', self.obs_total_dim, input_dict["obs"].flatten(start_dim=1, end_dim=-1).shape)
         # model_out = self.model(input_dict["obs"].permute(0, 3, 1, 2))
+
+        # print(self.name, self.obs_space, self.action_space, input_dict.keys())
+
         model_out = self.model(input_dict["obs"].to(torch.float32) / 255)
         self._value_out = self.value_fn(model_out)
         return self.policy_fn(model_out), state
@@ -72,37 +75,7 @@ if __name__ == "__main__":
         'max_cycles': 1024,
     }
     # register_env(env_name, lambda config: PettingZooEnv(wolfpack_env_creator(config_template)))
-    register_env(env_name, lambda config: MEnvCP(P2M(wolfpack_env_creator(config_template))))
-
-    env_example = PEnvCP(wolfpack_env_creator(config_template))
-
-    policies = {
-        'central_planner': (
-            AMDAgentTorchPolicy,
-            env_example.observation_space('central_planner'),
-            env_example.action_space('central_planner'),
-            {},
-        ),
-        'wolf_1': (
-            AMDAgentTorchPolicy,
-            env_example.observation_space('wolf_1'),
-            env_example.action_space('wolf_1'),
-            {},
-        ),
-        'wolf_2': (
-            AMDAgentTorchPolicy,
-            env_example.observation_space('wolf_2'),
-            env_example.action_space('wolf_2'),
-            {},
-        ),
-        'prey': (
-            AMDAgentTorchPolicy,
-            env_example.observation_space('prey'),
-            env_example.action_space('prey'),
-            {},
-        ),
-    }
-    # print(policies)
+    register_env(env_name, lambda config: P2M(wolfpack_env_creator(config_template)))
 
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
@@ -116,14 +89,16 @@ if __name__ == "__main__":
             train_batch_size=1024,
             lr=2e-5,
             gamma=0.99,
+            coop_agent_list=['wolf_1', 'wolf_2'],
+            planner_reward_max=0.5,
+            force_zero_sum=False,
         ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
             num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
             num_cpus_per_worker=3,
-        ).multi_agent(
-            # policies=['wolf_1', 'wolf_2', 'prey', 'central_planner'],
-            policies=policies,
-            policy_mapping_fn=(lambda agent_id, *args, **kwargs: agent_id),
-        ).callbacks(AMDAgentWarenessCallback))
+        ))
+
+    # print(config.is_multi_agent())
+    # print(config.to_dict().keys())
 
     tune.run(
         AMD,

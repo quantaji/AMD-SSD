@@ -21,9 +21,10 @@ from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.typing import TensorType
 from ray.rllib.utils.torch_utils import apply_grad_clipping, sequence_mask
 from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
-from .amd import PreLearningProcessing
+from ray.rllib.models.action_dist import ActionDistribution
+from ray.rllib.models.modelv2 import ModelV2
 
-from .amd import AMDAgentPolicy
+from .constants import PreLearningProcessing, CENTRAL_PLANNER
 
 import torch
 import torch.nn as nn
@@ -36,7 +37,53 @@ from gymnasium.vector.utils import concatenate, create_empty_array
 import numpy as np
 
 
-class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
+class AMDAgent:
+    """common functions that will be used by both torch and tf policy"""
+
+    def compute_awareness(self, sample_batch: SampleBatch):
+        """Calculate advantage function from critic, and also calculate awareness w.r.t. the whole batch"""
+        raise NotImplementedError
+
+    def loss_agent(
+        self,
+        model: ModelV2,
+        dist_class: ActionDistribution,
+        train_batch: SampleBatch,
+    ) -> Union[TensorType, List[TensorType]]:
+        """Loss for agent"""
+        raise NotImplementedError
+
+
+class AMDPlanner:
+
+    def loss_central_planner(
+        self,
+        model: ModelV2,
+        dist_class: ActionDistribution,
+        train_batch: SampleBatch,
+    ) -> Union[TensorType, List[TensorType]]:
+        """Loss for agent"""
+        raise NotImplementedError
+
+
+class AMDGeneralPolicy(AMDPlanner, AMDAgent, Policy):
+
+    is_central_planner: bool = False
+
+    def loss(
+        self,
+        model: ModelV2,
+        dist_class: ActionDistribution,
+        train_batch: SampleBatch,
+    ) -> Union[TensorType, List[TensorType]]:
+
+        if self.is_central_planner:
+            return self.loss_central_planner(model=model, dist_class=dist_class, train_batch=train_batch)
+        else:
+            return self.loss_agent(model=model, dist_class=dist_class, train_batch=train_batch)
+
+
+class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
     """Pytorch policy class used for Adaptive Mechanism design."""
 
     model: nn.Module
@@ -51,6 +98,21 @@ class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
         # TODO remove this: put it into config
         self.config['policy_param'] = 'neural'
 
+    @override(A3CTorchPolicy)
+    def stats_fn(self, train_batch: SampleBatch) -> Dict[str, TensorType]:
+        if self.is_central_planner:
+            return convert_to_numpy({
+                "planner_policy_loss": torch.mean(torch.stack(self.get_tower_stats("planner_policy_loss"))),
+                "planner_reward_cost": torch.mean(torch.stack(self.get_tower_stats("planner_reward_cost"))),
+                "cur_lr": self.cur_lr,
+            })
+        else:
+            return convert_to_numpy({
+                "agent_policy_loss": torch.mean(torch.stack(self.get_tower_stats("agent_policy_loss"))),
+                "agent_value_loss": torch.mean(torch.stack(self.get_tower_stats("agent_value_loss"))),
+                "cur_lr": self.cur_lr,
+            })
+
     def postprocess_trajectory(
         self,
         sample_batch: SampleBatch,
@@ -59,12 +121,54 @@ class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
     ) -> SampleBatch:
         sample_batch = super().postprocess_trajectory(sample_batch)
 
-        # ! STEP 1: calculate gae, this will add ADVANTAGEs and VALUE_TAEGETS into this batch
-        sample_batch = compute_gae_for_sample_batch(self, sample_batch, other_agent_batches, episode)
+        if not self.is_central_planner:
+            # ! STEP 1: calculate gae, this will add ADVANTAGEs and VALUE_TAEGETS into this batch
+            # central planner does not need critic
+            sample_batch = compute_gae_for_sample_batch(self, sample_batch, other_agent_batches, episode)
 
-        self.config['policy_param'] = 'neural'  # ! For testing
+            # ! STEP 2: placeholder for reward from planner, this is for skipping Policy._initialize_loss_from_dummy_batch().
+            # Since the default class is agent, we only have to pass a r_planner term
+            sample_batch[PreLearningProcessing.R_PLANNER] = 0 * sample_batch[SampleBatch.REWARDS]
 
         return sample_batch
+
+    def loss_agent(
+        self,
+        model: ModelV2,
+        dist_class: ActionDistribution,
+        train_batch: SampleBatch,
+    ) -> TensorType | List[TensorType]:
+
+        # Pass the training data through our model to get distribution parameters.
+        dist_inputs, _ = model(train_batch)
+        # get value estimation by critic
+        values = model.value_function()
+
+        # Create an action distribution object.
+        action_dist = dist_class(dist_inputs, model)
+
+        # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
+        log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])
+
+        # total rewards = GAE of critic + reward by planner
+        total_rewards = train_batch[Postprocessing.ADVANTAGES] + train_batch[PreLearningProcessing.R_PLANNER]
+
+        # Final policy loss.
+        policy_loss = -torch.mean(log_probs * total_rewards)
+
+        # Compute a value function loss.
+        if self.config["use_critic"]:
+            value_loss = 0.5 * torch.sum(torch.pow(values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS], 2.0))
+
+        else:  # Ignore the value function.
+            value_loss = 0.0
+
+        # Store values for stats function in model (tower), such that for
+        # multi-GPU, we do not override them during the parallel loss phase.
+        model.tower_stats["agent_policy_loss"] = policy_loss
+        model.tower_stats["agent_value_loss"] = value_loss
+
+        return policy_loss
 
     def preprocess_batch_before_learning(
         self,
@@ -129,11 +233,3 @@ class AMDAgentTorchPolicy(A3CTorchPolicy, AMDAgentPolicy):
         sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
 
         return sample_batch
-
-
-class AMDPlannerTorchPolicy(LearningRateSchedule, TorchPolicyV2):
-    """Pytorch policy class used for Adaptive Mechanism design."""
-
-    central_planner_info_space: spaces.Space  # used for central planner to organized infos
-
-    pass

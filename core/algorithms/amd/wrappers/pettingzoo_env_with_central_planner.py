@@ -14,13 +14,13 @@ from pettingzoo.utils.env import ObsType, ActionType, AgentID, ObsDict, ActionDi
 
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
-from ..amd import PreLearningProcessing
+from ..constants import PreLearningProcessing, CENTRAL_PLANNER
 
 
 class ParallelEnvWithCentralPlanner(ParallelEnv):
     """This object add a central planner to the environment"""
 
-    CENTRAL_PLANNER: str = 'central_planner'  # agent id of central planner
+    CENTRAL_PLANNER: str = CENTRAL_PLANNER  # agent id of central planner
 
     possible_individual_agents: List[str]
 
@@ -66,7 +66,8 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
         # # add action space
         action_space = {}
         for agent_id in self.possible_individual_agents:
-            action_space[agent_id] = gymnasium.spaces.Box(low=-np.infty, high=np.infty, shape=(1, ))
+            # action_space[agent_id] = gymnasium.spaces.Box(low=-np.infty, high=np.infty, shape=(1, ))
+            action_space[agent_id] = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(1, ))
         self.central_planner_action_space_unflattened = gymnasium.spaces.Dict(action_space)
         self.action_spaces[self.CENTRAL_PLANNER] = gymnasium.spaces.flatten_space(self.central_planner_action_space_unflattened)
 
