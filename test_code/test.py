@@ -19,7 +19,7 @@ from core.environments.wolfpack.env import wolfpack_env_creator
 from core.algorithms.amd.callback import AMDAgentWarenessCallback
 from core.algorithms.amd.amd_torch_policy import AMDAgentTorchPolicy
 from core.algorithms.amd.amd import AMDConfig, AMD, PreLearningProcessing
-from core.algorithms.amd.wrappers import ParallelEnvWithCentralPlanner as PEnvCP, MultiAgentEnvFromPettingZooParallel as P2M, MultiAgentEnvWithCentralPlanne as MEnvCP
+from core.algorithms.amd.wrappers import ParallelEnvWithCentralPlanner as PEnvCP, MultiAgentEnvFromPettingZooParallel as P2M, MultiAgentEnvWithCentralPlanner as MEnvCP
 from ray.rllib.policy.policy import PolicySpec
 
 

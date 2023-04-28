@@ -34,3 +34,4 @@ from ray.rllib.models.torch import torch_modelv2
 from ray.rllib.policy.sample_batch import concat_samples, concat_samples_into_ma_batch
 
 from gymnasium.vector.utils import concatenate
+from ray.rllib.evaluation.sampler import SamplerInput
