@@ -86,16 +86,19 @@ if __name__ == "__main__":
                 # Extra kwargs to be passed to your model's c'tor.
                 "custom_model_config": {},
             },
-            train_batch_size=1024,
+            train_batch_size=512,
             lr=2e-5,
             gamma=0.99,
             coop_agent_list=['wolf_1', 'wolf_2'],
             planner_reward_max=0.5,
             force_zero_sum=False,
+            param_assumption='softmax',
         ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
             num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
             num_cpus_per_worker=3,
         ))
+
+    # print(config.get_multi_agent_setup())
 
     # print(config.is_multi_agent())
     # print(config.to_dict().keys())

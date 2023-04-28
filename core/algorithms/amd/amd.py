@@ -1,11 +1,14 @@
 import logging
-from typing import Callable, Dict, List, Optional, Type, Union, TYPE_CHECKING, Tuple
+import numpy as np
+from typing import Any, Callable, Dict, List, Optional, Type, Union, TYPE_CHECKING, Tuple
 from ray.rllib.algorithms.a3c.a3c import A3CConfig
+from ray.rllib.env.env_context import EnvContext
+from ray.rllib.utils.from_config import NotProvided
 
 from ray.util.debug import log_once
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.callbacks import DefaultCallbacks, MultiCallbacks
-from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided, Space
+from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided, Space, gym
 from ray.rllib.algorithms.pg import PGConfig, PG
 from ray.rllib.algorithms.a3c import A3CConfig, A3C
 from ray.rllib.execution.rollout_ops import (
@@ -23,7 +26,7 @@ from ray.rllib.utils.deprecation import (
     deprecation_warning,
 )
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
-from ray.rllib.utils.typing import MultiAgentPolicyConfigDict, ResultDict, SampleBatchType
+from ray.rllib.utils.typing import EnvConfigDict, MultiAgentPolicyConfigDict, ResultDict, SampleBatchType
 from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
 from ray.rllib.utils.metrics import (
     NUM_AGENT_STEPS_SAMPLED,
@@ -53,9 +56,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+from gymnasium import spaces
+from gymnasium.vector.utils import batch_space, concatenate, iterate, create_empty_array
+
 from .constants import PreLearningProcessing, CENTRAL_PLANNER
 from .callback import AMDDefualtCallback
 from .wrappers import MultiAgentEnvWithCentralPlanner
+from .utils import get_env_example, get_availability_mask
 
 
 class AMDConfig(A3CConfig):
@@ -90,6 +97,16 @@ class AMDConfig(A3CConfig):
                              "returns a subclass of DefaultCallbacks, got "
                              f"{callbacks_class}!")
         self.callbacks_class = MultiCallbacks([AMDDefualtCallback, callbacks_class])
+
+        return self
+
+    @override(A3CConfig)
+    def environment(self, **kwargs) -> AlgorithmConfig:
+        """This also computes an env example and if coop_agent_list is not specified, turn is to all agents as coorperative agent"""
+        super().environment(**kwargs)
+        env_example = get_env_example(self)
+        if (self.coop_agent_list is None) and isinstance(env_example, MultiAgentEnv):
+            self.coop_agent_list = list(env_example.get_agent_ids())
 
         return self
 
@@ -150,6 +167,8 @@ class AMDConfig(A3CConfig):
 
         # ! STEP 1: get the total class of policy
         # first if there is no central planner, turn the env into one with central planner
+
+        env = (env or get_env_example(self))
         assert isinstance(env, MultiAgentEnv), "The current code only supports multiagent env!"
         env: MultiAgentEnv
         # we also assume that the env already has a central planner
@@ -162,11 +181,6 @@ class AMDConfig(A3CConfig):
             spaces=spaces,
             default_policy_class=default_policy_class,
         )
-
-        # print(policies, is_policy_to_train)
-        # for policy_id in policies.keys():
-        #     # print(policy_id, policies[policy_id].observation_space, policies[policy_id].action_space)
-        #     # policies[policy_id].policy_id
 
         return policies, is_policy_to_train
 
@@ -181,6 +195,9 @@ class AMD(A3C):
 
         Therefore, we need two times of forwarding to agent. For forward_1, we can use a callback on_sample_end(), and and use keyword value_fn_estimate, reward_planner
     """
+
+    reward_space_unflattened: spaces.Dict
+    reward_space: spaces.Box
 
     @classmethod
     @override(A3C)
@@ -209,17 +226,100 @@ class AMD(A3C):
         self._counters[NUM_AGENT_STEPS_SAMPLED] += train_batch.agent_steps()
         self._counters[NUM_ENV_STEPS_SAMPLED] += train_batch.env_steps()
 
-        # for pid, batch in train_batch.policy_batches.items():
-        #     print(pid)
-        #     print(batch)
-
-        # print(self.workers.local_worker().policy_map)
+        # for conviniency
         worker = self.workers.local_worker()
-        worker.env: MultiAgentEnv
-        for policy_id in worker.policy_map.keys():
-            print(worker.policy_map[policy_id])
-            print(train_batch[policy_id])
+        policy_map = worker.policy_map
+
+        # compute awareness
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                policy_map[policy_id].compute_awareness(train_batch[policy_id])
+
+        train_batch = self.prelearning_process_trajectory(train_batch)
+        print(train_batch)
+        for policy_id, batch in train_batch.policy_batches.items():
+            print(
+                policy_id,
+                'r_planner',
+                # batch[PreLearningProcessing.R_PLANNER],
+                batch[PreLearningProcessing.R_PLANNER].shape,
+            )
+            if policy_id == CENTRAL_PLANNER:
+                print(
+                    policy_id,
+                    'avail',
+                    # batch[PreLearningProcessing.AVAILABILITY],
+                    batch[PreLearningProcessing.AVAILABILITY].shape,
+                    'aware',
+                    # batch[PreLearningProcessing.AWARENESS],
+                    batch[PreLearningProcessing.AWARENESS].shape,
+                )
+            else:
+                print(
+                    policy_id,
+                    'aware',
+                    # batch[PreLearningProcessing.AWARENESS],
+                    batch[PreLearningProcessing.AWARENESS].shape,
+                )
+
         raise NotImplementedError
+
+    def prelearning_process_trajectory(self, train_batch: SampleBatch):
+        """This fucntion organizes train batch"""
+        # ! STEP 1: get central planer's t, episode_id
+        cp_t = train_batch[CENTRAL_PLANNER][SampleBatch.T]
+        cp_eps_id = train_batch[CENTRAL_PLANNER][SampleBatch.EPS_ID]
+
+        # ! STEP 2: get a mask of array indicating which agent are in compuation
+        appearance_mask_unflattened = {}  # stores which agent shows up in dict, to minus its mean
+        for agent_id in self.reward_space_unflattened.keys():
+            appearance_mask_unflattened[agent_id] = (agent_id in self.config['coop_agent_list'] or (self.config['coop_agent_list'] is None))
+        appearance: np.ndarray = spaces.flatten(self.reward_space_unflattened, appearance_mask_unflattened).astype(bool)  # shape of (n_agent, )
+
+        # ! STEP 3: preprocess and distribute rewards
+        r_planner: np.ndarray = self.config['planner_reward_max'] * train_batch[CENTRAL_PLANNER][SampleBatch.ACTIONS]
+        if self.config['force_zero_sum']:
+            r_planner = r_planner - r_planner[:, appearance].mean(axis=-1).reshape(-1, 1)
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.R_PLANNER] = r_planner
+
+        batch_size = r_planner.shape[0]
+        batch_uf = batch_space(self.reward_space_unflattened, batch_size)
+        r_planner_unflattened = spaces.unflatten(batch_uf, r_planner.T.flatten())  # this transpose is very important!
+
+        # pre-define structured data for central planner
+        awareness_uf = create_empty_array(self.reward_space_unflattened, batch_size)
+        avail_uf = create_empty_array(self.reward_space_unflattened, batch_size)
+
+        # ! STEP 4: calculate availability, put r_planner into agent, put avail and awareness into spaces.Dict
+        policy_map = self.workers.local_worker().policy_map
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                batch = train_batch[policy_id]
+
+                # 4.1 compute availability
+                avail = get_availability_mask(
+                    cp_t=cp_t,
+                    cp_eps_id=cp_eps_id,
+                    ag_t=batch[SampleBatch.T],
+                    ag_eps_id=batch[SampleBatch.EPS_ID],
+                )
+
+                # 4.2 put r_planner into agent's batch
+                batch[PreLearningProcessing.R_PLANNER] = r_planner_unflattened[policy_id].reshape(-1)[avail]
+
+                # modify availability
+                avail_uf[policy_id] = avail.reshape(-1, 1).astype(float)
+
+                # modify awareness
+                awareness_uf[policy_id][avail, :] = batch[PreLearningProcessing.AWARENESS].reshape(-1, 1)
+
+        # ! STEP 5: change awareness and avail_f into compact shape
+        awareness = spaces.flatten(batch_uf, awareness_uf).reshape(r_planner.T.shape).T  # the transpose is necessary
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.AWARENESS] = awareness
+        availability = spaces.flatten(batch_uf, avail_uf).reshape(r_planner.T.shape).T.astype(bool)
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.AVAILABILITY] = availability
+
+        return train_batch
 
     @override(A3C)
     @staticmethod

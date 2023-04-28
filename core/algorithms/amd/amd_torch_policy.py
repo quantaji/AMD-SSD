@@ -130,6 +130,8 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             # Since the default class is agent, we only have to pass a r_planner term
             sample_batch[PreLearningProcessing.R_PLANNER] = 0 * sample_batch[SampleBatch.REWARDS]
 
+            sample_batch[PreLearningProcessing.AWARENESS] = 0 * sample_batch[SampleBatch.REWARDS]
+
         return sample_batch
 
     def loss_agent(
@@ -170,66 +172,59 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
         return policy_loss
 
-    def preprocess_batch_before_learning(
-        self,
-        sample_batch: SampleBatch,
-        other_agent_batches: Dict[Any, SampleBatch] | None = None,
-        episode: Episode | None = None,
-    ) -> SampleBatch:
-        sample_batch = super().postprocess_trajectory(sample_batch)
-
-        raise NotImplementedError
-
-        self.config['policy_param'] = 'neural'  # ! For testing
-
-        # ! STEP 1: get awareness, depending on algorithm's parameterizaiton assumption, whether it is neural param, or softmax parameterization
-        # get ready for calculating awareness
-        copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
-        awareness = torch.zeros(copied_batch[SampleBatch.REWARDS].shape, device=self.device)
-        if self.config['policy_param'] == 'neural':
-            """
-            Agents do policy gradient with assumtion of neural network parameterization
-            """
-
-            def func_call_log_probs_along_traj(params, input_batch: SampleBatch):
-                dist_input, _ = functional_call(self.model, params, input_batch)
-                action_dist = self.dist_class(dist_input, self.model)
-                log_probs = action_dist.logp(input_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
-                return log_probs
-
-            dict_params = dict(self.model.named_parameters())
-            jac_logp_theta = jacrev(
-                lambda params: func_call_log_probs_along_traj(params=params, input_batch=copied_batch),
-                argnums=0,
-            )(dict_params)  # a dict with each element of shape (Batch, (shape_params))
-
-            for param in dict_params.keys():
-                """
-                first accumlate over all advantage,
-                chagne to ((shape_params), Batch) for broadcasting.
-                NOTE 1: multiplication btw torch tensor and np array, tensor as front!
-                NOTE 2: unlike a3c algorithm, I didnot consider the case of model is recurrent.
-                """
-                agent_pg = torch.sum(jac_logp_theta[param].movedim(0, -1) * copied_batch[Postprocessing.ADVANTAGES], dim=-1)  # (shape_params,)
-                awareness_unsummed = agent_pg * jac_logp_theta[param]  # (Batch, (shape_params))
-                awareness = awareness + awareness_unsummed.view(awareness_unsummed.shape[0], -1).sum(dim=-1)
-
-        elif self.config['policy_param'] == 'softmax':
-            """
-            Agents do policy gradient with assumtion of softmax parameterizization. In this case:
-                paital{logp(a, s)}{theta(a', s')} = 1{s=s', a=a'} - pi(a', s)1{s=s'}
-            Therefore, we only need to return jacobian(logp, theta) as tensor:
-                1 - pi(a, s)
-            of shape (Batch, num_actions).
-            NOTE: 'softmax' option natually assumes a multinomial distribution, so the model's output is assumed to be the logits.
-            NOTE: Determining state is equal or not is difficult for me, so I assume every input state is not equal, therefore, the result is simply g_log_p(s)^2.sum x advantage
-            """
-            logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
-            g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
-            awareness = (g_logp_s * g_logp_s).sum(dim=1) * copied_batch[Postprocessing.ADVANTAGES]
+    def compute_awareness(self, sample_batch: SampleBatch):
+        """This function computes the awareness for each agent"""
+        if self.is_central_planner:
+            return sample_batch
         else:
-            raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
 
-        sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
+            # get ready for calculating awareness
+            copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
+            awareness = torch.zeros(copied_batch[SampleBatch.REWARDS].shape, device=self.device)
+            if self.config['param_assumption'] == 'neural':
+                """
+                Agents do policy gradient with assumtion of neural network parameterization
+                """
 
-        return sample_batch
+                def func_call_log_probs_along_traj(params, input_batch: SampleBatch):
+                    dist_input, _ = functional_call(self.model, params, input_batch)
+                    action_dist = self.dist_class(dist_input, self.model)
+                    log_probs = action_dist.logp(input_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
+                    return log_probs
+
+                dict_params = dict(self.model.named_parameters())
+                jac_logp_theta = jacrev(
+                    lambda params: func_call_log_probs_along_traj(params=params, input_batch=copied_batch),
+                    argnums=0,
+                )(dict_params)  # a dict with each element of shape (Batch, (shape_params))
+
+                for param in dict_params.keys():
+                    """
+                    first accumlate over all advantage,
+                    chagne to ((shape_params), Batch) for broadcasting.
+                    NOTE 1: multiplication btw torch tensor and np array, tensor as front!
+                    NOTE 2: unlike a3c algorithm, I didnot consider the case of model is recurrent.
+                    """
+                    agent_pg = torch.sum(jac_logp_theta[param].movedim(0, -1) * copied_batch[Postprocessing.ADVANTAGES], dim=-1)  # (shape_params,)
+                    awareness_unsummed = agent_pg * jac_logp_theta[param]  # (Batch, (shape_params))
+                    awareness = awareness + awareness_unsummed.view(awareness_unsummed.shape[0], -1).sum(dim=-1)
+
+            elif self.config['param_assumption'] == 'softmax':
+                """
+                Agents do policy gradient with assumtion of softmax parameterizization. In this case:
+                    paital{logp(a, s)}{theta(a', s')} = 1{s=s', a=a'} - pi(a', s)1{s=s'}
+                Therefore, we only need to return jacobian(logp, theta) as tensor:
+                    1 - pi(a, s)
+                of shape (Batch, num_actions).
+                NOTE: 'softmax' option natually assumes a multinomial distribution, so the model's output is assumed to be the logits.
+                NOTE: Determining state is equal or not is difficult for me, so I assume every input state is not equal, therefore, the result is simply g_log_p(s)^2.sum x advantage
+                """
+                logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
+                g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
+                awareness = (g_logp_s * g_logp_s).sum(dim=1) * copied_batch[Postprocessing.ADVANTAGES]
+            else:
+                raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
+
+            sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
+
+            return sample_batch
