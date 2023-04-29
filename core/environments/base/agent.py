@@ -8,17 +8,16 @@ The key principle is that
 
 further we have to also define the world size and observation size for agent
 """
+from typing import List, Tuple
+
 import numpy as np
-from pettingzoo.utils.env import (
-    ActionType,
-    AgentID,
+from pettingzoo.utils.env import ActionType, AgentID
+
+from .constants import (
+    ACTION_ORIENTATION_CHANGE,
+    ACTION_POSITION_CHANGE,
+    ORIENTATION_CHANGE,
 )
-from typing import (
-    Tuple,
-    Set,
-    List,
-)
-from .constants import (ACTION_POSITION_CHANGE, ACTION_ORIENTATION_CHANGE, ORIENTATION_CHANGE)
 
 
 class GridWorldAgentBase:

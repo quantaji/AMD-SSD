@@ -1,20 +1,22 @@
-import os, sys
+import os
+import sys
+
+import gymnasium as gym
+import numpy as np
 import ray
+import torch
 from ray import tune
-# from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.pg import PGConfig
-from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv, PettingZooEnv
+from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.tune.registry import register_env
 from torch import nn
-import torch
-import gymnasium as gym
-import numpy as np
 
 module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
     sys.path.append(module_path)
+
 from core.environments.wolfpack.env import wolfpack_env_creator
 
 

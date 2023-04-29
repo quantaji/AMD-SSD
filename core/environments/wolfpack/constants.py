@@ -1,4 +1,4 @@
-from ..base.constants import BASE_GRID_STATE, BASE_GRID_COLOR, BASE_ACTIONS
+from ..base.constants import BASE_ACTIONS, BASE_GRID_COLOR, BASE_GRID_STATE
 
 WOLFPACK_STATE = BASE_GRID_STATE.copy()
 WOLFPACK_STATE.update({

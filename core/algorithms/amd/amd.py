@@ -1,70 +1,38 @@
-import logging
-import numpy as np
 import time
-from typing import Any, Callable, Dict, List, Optional, Type, Union, TYPE_CHECKING, Tuple
-from ray.rllib.algorithms.a3c.a3c import A3CConfig
-from ray.rllib.env.env_context import EnvContext
-from ray.rllib.utils.from_config import NotProvided
+from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 
-from ray.util.debug import log_once
+import numpy as np
+from gymnasium import spaces
+from gymnasium.vector.utils import batch_space, create_empty_array
+from ray.rllib.algorithms.a3c import A3C, A3CConfig
 from ray.rllib.algorithms.algorithm import Algorithm
+from ray.rllib.algorithms.algorithm_config import (AlgorithmConfig, NotProvided, Space)
 from ray.rllib.algorithms.callbacks import DefaultCallbacks, MultiCallbacks
-from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided, Space, gym
-from ray.rllib.algorithms.pg import PGConfig, PG
-from ray.rllib.algorithms.a3c import A3CConfig, A3C
-from ray.rllib.execution.rollout_ops import (
-    standardize_fields, )
-from ray.rllib.execution.train_ops import (
-    train_one_step,
-    multi_gpu_train_one_step,
-)
-from ray.rllib.utils.annotations import ExperimentalAPI
-from ray.rllib.policy.policy import Policy
-from ray.rllib.utils.annotations import override
-from ray.rllib.utils.deprecation import (
-    Deprecated,
-    DEPRECATED_VALUE,
-    deprecation_warning,
-)
-from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
-from ray.rllib.utils.typing import EnvConfigDict, MultiAgentPolicyConfigDict, ResultDict, SampleBatchType
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
+from ray.rllib.execution.train_ops import (multi_gpu_train_one_step, train_one_step)
+from ray.rllib.policy.policy import Policy
+from ray.rllib.policy.sample_batch import SampleBatch
+from ray.rllib.utils.annotations import override
+from ray.rllib.utils.from_config import NotProvided
 from ray.rllib.utils.metrics import (
     NUM_AGENT_STEPS_SAMPLED,
     NUM_ENV_STEPS_SAMPLED,
     SYNCH_WORKER_WEIGHTS_TIMER,
 )
-from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from ray.rllib.models.action_dist import ActionDistribution
-from ray.rllib.evaluation.rollout_worker import RolloutWorker
-from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.utils.typing import (
-    AgentID,
-    AlgorithmConfigDict,
-    ModelGradients,
-    ModelWeights,
-    PolicyID,
-    PolicyState,
-    T,
-    EnvType,
     EnvCreator,
-    TensorStructType,
-    TensorType,
+    EnvType,
+    MultiAgentPolicyConfigDict,
+    PolicyID,
+    ResultDict,
+    SampleBatchType,
 )
 
-if TYPE_CHECKING:
-    from ray.rllib.core.rl_module import RLModule
-
-logger = logging.getLogger(__name__)
-
-from gymnasium import spaces
-from gymnasium.vector.utils import batch_space, concatenate, iterate, create_empty_array
-
-from .constants import PreLearningProcessing, CENTRAL_PLANNER
 from .callback import AMDDefualtCallback
+from .constants import CENTRAL_PLANNER, PreLearningProcessing
+from .utils import get_availability_mask, get_env_example
 from .wrappers import MultiAgentEnvWithCentralPlanner
-from .utils import get_env_example, get_availability_mask
 
 
 class AMDConfig(A3CConfig):

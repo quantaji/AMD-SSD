@@ -1,11 +1,8 @@
-from ..base.agent import GridWorldAgentBase
-from pettingzoo.utils.env import (
-    ActionType,
-    AgentID,
-)
-from core.environments.wolfpack.constants import WOLFPACK_NO_ENTRY_STATE
-
 import numpy as np
+from pettingzoo.utils.env import ActionType, AgentID
+
+from ..base.agent import GridWorldAgentBase
+from .constants import WOLFPACK_NO_ENTRY_STATE
 
 
 class WolfpackAgent(GridWorldAgentBase):

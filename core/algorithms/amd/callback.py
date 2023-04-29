@@ -1,18 +1,11 @@
-from ray.rllib.algorithms.callbacks import DefaultCallbacks
-
 # typing:
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
-from ray.rllib.algorithms.algorithm import Algorithm
-from ray.rllib.env.env_context import EnvContext
-from ray.rllib.evaluation import RolloutWorker
-from ray.rllib.policy import Policy
-from ray.rllib.utils.typing import AgentID, EnvType, PolicyID
-from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
-
 from gymnasium import spaces
+from ray.rllib.algorithms.algorithm import Algorithm
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.utils.typing import PolicyID
 
 from .amd_torch_policy import AMDGeneralPolicy
-from .constants import CENTRAL_PLANNER, PreLearningProcessing
+from .constants import CENTRAL_PLANNER
 
 
 class AMDDefualtCallback(DefaultCallbacks):

@@ -1,20 +1,7 @@
-from __future__ import annotations
-
-import warnings
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar
-
-from gymnasium.vector.utils import create_empty_array
-import numpy as np
-from numpy import ndarray
-from gymnasium.spaces import Space
+from typing import Optional
 from gymnasium import spaces
-
 from pettingzoo.utils.env import ParallelEnv
-from pettingzoo.utils.env import ObsType, ActionType, AgentID, ObsDict, ActionDict
-
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
-
-from ..constants import PreLearningProcessing
 
 STATE_SPACE = 'state_space'
 
@@ -27,19 +14,19 @@ class MultiAgentEnvFromPettingZooParallel(MultiAgentEnv):
         self.par_env.reset()
 
         self.observation_space = spaces.Dict(self.par_env.observation_spaces)
-        self._check_if_action_space_maps_agent_id_to_sub_space
         self.action_space = spaces.Dict(self.par_env.action_spaces)
+
         self._agent_ids = set(self.par_env.possible_agents)
 
         # see if state is callable
         try:
-            self.par_env.state()
-            self.state = self.par_env.state
+            getattr(self.par_env, ENV_STATE)()
+            self.state = getattr(self.par_env, ENV_STATE)
         except:
             pass
 
         # see if it specifies state space
-        if hasattr(self.par_env, STATE_SPACE) and isinstance(getattr(self.par_env, STATE_SPACE), Space):
+        if hasattr(self.par_env, STATE_SPACE) and isinstance(getattr(self.par_env, STATE_SPACE), spaces.Space):
             self.state_space = getattr(self.par_env, STATE_SPACE)
 
         self._obs_space_in_preferred_format = self._check_if_obs_space_maps_agent_id_to_sub_space()

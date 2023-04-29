@@ -1,5 +1,6 @@
-import numpy as np
 from typing import Dict, Tuple
+
+import numpy as np
 
 
 def ascii_list_to_array(ascii_list):

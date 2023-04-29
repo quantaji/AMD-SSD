@@ -1,43 +1,30 @@
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    TypeVar,
-)
-from pettingzoo.utils.env import (
-    ObsType,
-    ActionType,
-    AgentID,
-    ObsDict,
-    ActionDict,
-)
+from typing import Any, Dict, List, Optional, Tuple
 
-import pygame
 import numpy as np
+import pygame
 from gymnasium import spaces
 from gymnasium.utils import seeding
-from pettingzoo.utils.env import ParallelEnv
+from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
 
 from ..base.gridworld import GridWorldBase
+from ..utils import (
+    ascii_array_to_rgb_array,
+    ascii_dict_to_color_array,
+    ascii_list_to_array,
+)
 from .agent import WolfpackAgent
 from .constants import (
-    WOLFPACK_MAP,
-    WOLFPACK_STATE,
-    WOLFPACK_STATE_SHAPE,
-    WOLFPACK_COLOR,
-    WOLFPACK_ORIENTATION_TUNE,
-    WOLFPACK_NO_ENTRY_STATE,
     WOLFPACK_ACTIONS,
-    WOLFPACK_OBSERVATION_SHAPE,
     WOLFPACK_AGENT_MAP,
-    WOLFPACK_ORIENTATION_BOUNDING_BOX,
     WOLFPACK_AGENT_VIEW_TUNE,
+    WOLFPACK_COLOR,
+    WOLFPACK_MAP,
+    WOLFPACK_NO_ENTRY_STATE,
+    WOLFPACK_OBSERVATION_SHAPE,
+    WOLFPACK_ORIENTATION_BOUNDING_BOX,
+    WOLFPACK_ORIENTATION_TUNE,
+    WOLFPACK_STATE_SHAPE,
 )
-from core.environments.utils import ascii_list_to_array, ascii_array_to_rgb_array, ascii_dict_to_color_array
 
 
 class Wolfpack(GridWorldBase):
@@ -53,14 +40,13 @@ class Wolfpack(GridWorldBase):
 
     agents = ['wolf_1', 'wolf_2', 'prey']
 
-    CAPTURE_RADIUS = 6
-
     def __init__(
         self,
         randomizer: np.random.Generator,
         r_lone: float = 1.0,
         r_team: float = 5.0,
         r_prey: float = 0.1,  # living reward for prey, this is constantly given
+        coop_radius: int = 6,
         max_cycles: int = 1024,
     ):
 
@@ -71,6 +57,7 @@ class Wolfpack(GridWorldBase):
         self.r_lone = r_lone
         self.r_team = r_team
         self.r_prey = r_prey
+        self.coop_radius = coop_radius
 
         self.max_cycles = max_cycles
 
@@ -178,13 +165,13 @@ class Wolfpack(GridWorldBase):
             # terminates
             self.terminations = dict(zip(self.agents, [True] * len(self.agents)))
 
-            if (dist_1 <= self.CAPTURE_RADIUS) and (dist_2 <= self.CAPTURE_RADIUS):  # cooperative success
+            if (dist_1 <= self.coop_radius) and (dist_2 <= self.coop_radius):  # cooperative success
                 self.rewards['wolf_1'] = self.r_team
                 self.rewards['wolf_2'] = self.r_team
             else:  # non-cooperative
-                if (dist_1 <= self.CAPTURE_RADIUS):
+                if (dist_1 <= self.coop_radius):
                     self.rewards['wolf_1'] = self.r_lone
-                if (dist_2 <= self.CAPTURE_RADIUS):
+                if (dist_2 <= self.coop_radius):
                     self.rewards['wolf_2'] = self.r_lone
 
         elif self.num_frames >= self.max_cycles:
@@ -288,6 +275,7 @@ def wolfpack_env_creator(config: Dict[str, Any] = {
     'r_lone': 1.0,
     'r_team': 5.0,
     'r_prey': 0.1,
+    'coop_radius': 6,
     'max_cycles': 1024,
 }) -> WolfpackEnv:
     env = WolfpackEnv(
@@ -303,5 +291,6 @@ wolfpack_env_default_config: Dict[str, Any] = {
     'r_lone': 1.0,
     'r_team': 5.0,
     'r_prey': 0.1,
+    'coop_radius': 6,
     'max_cycles': 1024,
 }

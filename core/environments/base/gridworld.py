@@ -21,28 +21,15 @@ I choose to use pettingzoo for following reasons:
 (1) pettingzoo.test.api_test can help test the env
 (2) rllib can convert pettingzoo env to rllib env
 """
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    TypeVar,
-)
-from pettingzoo.utils.env import (
-    ObsType,
-    ActionType,
-    AgentID,
-    ObsDict,
-    ActionDict,
-)
-from .agent import GridWorldAgentBase
-from ..utils import ascii_dict_to_color_array, ascii_array_to_str
-from gymnasium import spaces, logger
 import pygame
+from gymnasium import logger, spaces
+from pettingzoo.utils.env import ActionDict, AgentID, ObsDict
+
+from ..utils import ascii_array_to_str
+from .agent import GridWorldAgentBase
 
 
 class GridWorldBase:

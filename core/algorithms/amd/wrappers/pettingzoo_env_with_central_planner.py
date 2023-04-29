@@ -1,20 +1,11 @@
-from __future__ import annotations
-
-import warnings
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar
-
-import gymnasium.spaces
-from gymnasium.vector.utils import create_empty_array
+from typing import Dict, List, Tuple
 import numpy as np
-from numpy import ndarray
-from gymnasium.spaces import Space
-
+from gymnasium import spaces
+from gymnasium.vector.utils import create_empty_array
 from pettingzoo.utils.env import ParallelEnv
-from pettingzoo.utils.env import ObsType, ActionType, AgentID, ObsDict, ActionDict
+from pettingzoo.utils.env import AgentID, ObsDict, ActionDict
 
-from ray.rllib.env.multi_agent_env import MultiAgentEnv
-
-from ..constants import PreLearningProcessing, CENTRAL_PLANNER
+from ..constants import CENTRAL_PLANNER
 
 
 class ParallelEnvWithCentralPlanner(ParallelEnv):
@@ -25,16 +16,12 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
     possible_individual_agents: List[str]
 
     # this is used for algorithm to organize infos into other stuff
-    central_planner_info_space: Space
+    central_planner_info_space: spaces.Space
 
     def __init__(self, env: ParallelEnv):
         super().__init__()
         self.env = env
         env.reset()
-
-        # make sure central planner's id is correct
-        while self.CENTRAL_PLANNER in self.env.possible_agents:
-            self.CENTRAL_PLANNER = self.CENTRAL_PLANNER + '_'
 
         # try if the env have .state() function, if so, the central planner takes the sate, otherwise it returns a flattened dict
         self.have_state = hasattr(self.env, "state_space")
@@ -60,16 +47,15 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
         if self.have_state:
             self.observation_spaces[self.CENTRAL_PLANNER] = self.env.state_space
         else:
-            self.central_planner_obseravation_space_unflattened = gymnasium.spaces.Dict(self.env.observation_spaces)
-            self.observation_spaces[self.CENTRAL_PLANNER] = gymnasium.spaces.flatten_space(self.central_planner_obseravation_space_unflattened)
+            self.central_planner_obseravation_space_unflattened = spaces.Dict(self.env.observation_spaces)
+            self.observation_spaces[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_obseravation_space_unflattened)
 
         # # add action space
         action_space = {}
         for agent_id in self.possible_individual_agents:
-            # action_space[agent_id] = gymnasium.spaces.Box(low=-np.infty, high=np.infty, shape=(1, ))
-            action_space[agent_id] = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(1, ))
-        self.central_planner_action_space_unflattened = gymnasium.spaces.Dict(action_space)
-        self.action_spaces[self.CENTRAL_PLANNER] = gymnasium.spaces.flatten_space(self.central_planner_action_space_unflattened)
+            action_space[agent_id] = spaces.Box(low=-1.0, high=1.0, shape=(1, ))
+        self.central_planner_action_space_unflattened = spaces.Dict(action_space)
+        self.action_spaces[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_action_space_unflattened)
 
     def observe_central_planner(self, obs: ObsDict):
         if self.have_state:
@@ -82,7 +68,7 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
                 else:
                     # note for terminated agents, central planner sees zeros
                     obs_cp[agent_id] = create_empty_array(self.observation_space(agent_id))
-            return gymnasium.spaces.flatten(self.central_planner_obseravation_space_unflattened, obs_cp)
+            return spaces.flatten(self.central_planner_obseravation_space_unflattened, obs_cp)
 
     def reset(self, seed: int | None = None, return_info: bool = False, options: dict | None = None) -> ObsDict:
         if return_info:
@@ -133,13 +119,13 @@ class ParallelEnvWithCentralPlanner(ParallelEnv):
     def close(self):
         return self.env.close()
 
-    def state(self) -> ndarray:
+    def state(self) -> np.ndarray:
         return self.env.state()
 
-    def observation_space(self, agent: AgentID) -> Space:
+    def observation_space(self, agent: AgentID) -> spaces.Space:
         return self.observation_spaces[agent]
 
-    def action_space(self, agent: AgentID) -> Space:
+    def action_space(self, agent: AgentID) -> spaces.Space:
         return self.action_spaces[agent]
 
     def unwrapped(self) -> ParallelEnv:

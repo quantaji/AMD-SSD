@@ -1,4 +1,5 @@
 CENTRAL_PLANNER: str = 'central_planner'
+STATE_SPACE = 'state_space'
 
 
 class PreLearningProcessing:
