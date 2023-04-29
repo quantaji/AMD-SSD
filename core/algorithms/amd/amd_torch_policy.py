@@ -225,8 +225,8 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
         log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])  # shape (Batch, )
 
-        policy_loss = torch.zeros_like(log_probs).mean()
-        reward_cost = torch.zeros_like(policy_loss)
+        policy_loss = torch.zeros_like(log_probs, requires_grad=True).mean()
+        reward_cost = torch.zeros_like(policy_loss, requires_grad=True)
 
         # only compute loss when reward_max is not zero, for saving computation
         if self.config['planner_reward_max'] > 0.0:
