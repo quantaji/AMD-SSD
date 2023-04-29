@@ -73,7 +73,7 @@ if __name__ == "__main__":
         env_config={
             'r_lone': 1.0,
             'r_team': 5.0,
-            'r_prey': 0.0,
+            'r_prey': 0.001,
             'coop_radius': 4,
             'max_cycles': 512,
         },
@@ -90,8 +90,9 @@ if __name__ == "__main__":
         lr=2e-5,
         gamma=0.99,
         coop_agent_list=['wolf_1', 'wolf_2'],
+        # planner_reward_max=0.1,
         planner_reward_max=0.0,
-        force_zero_sum=True,
+        force_zero_sum=False,
         param_assumption='neural',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
@@ -100,6 +101,7 @@ if __name__ == "__main__":
 
     tune.run(
         AMD,
+        # name="amd_with_r_planner_max=0.1",
         name="actor_critic_with_no_planner",
         stop={"timesteps_total": 5000000},
         checkpoint_freq=10,
