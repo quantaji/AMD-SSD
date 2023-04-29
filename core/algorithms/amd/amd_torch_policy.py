@@ -8,10 +8,10 @@ import torch.nn as nn
 from gymnasium import spaces
 from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
 from ray.rllib.evaluation.episode import Episode
-from ray.rllib.evaluation.postprocessing import (Postprocessing,
-                                                 compute_gae_for_sample_batch)
+from ray.rllib.evaluation.postprocessing import Postprocessing, compute_gae_for_sample_batch
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.modelv2 import ModelV2
+from ray.rllib.models.torch import torch_modelv2
 from ray.rllib.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
@@ -121,7 +121,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
     def loss_agent(
         self,
-        model: ModelV2,
+        model: torch_modelv2,
         dist_class: ActionDistribution,
         train_batch: SampleBatch,
     ) -> TensorType | List[TensorType]:
@@ -158,9 +158,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
     def compute_awareness(self, sample_batch: SampleBatch):
         """This function computes the awareness for each agent"""
-        if self.is_central_planner:
-            return sample_batch
-        else:
+        if (not self.is_central_planner) and self.config['planner_reward_max'] > 0.0:
 
             # get ready for calculating awareness
             copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
@@ -211,32 +209,35 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
             sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
 
-            return sample_batch
+        return sample_batch
 
     def loss_central_planner(
         self,
-        model: ModelV2,
+        model: torch_modelv2,
         dist_class: ActionDistribution,
         train_batch: SampleBatch,
     ) -> TensorType | List[TensorType]:
 
         # Pass the training data through our model to get distribution parameters.
         dist_inputs, _ = model(train_batch)
-
         # Create an action distribution object.
         action_dist = dist_class(dist_inputs, model)
-
         # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
         log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])  # shape (Batch, )
 
-        # the effective reward is availability x awareness x r_planner
-        r_eff = (train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.AWARENESS] * train_batch[PreLearningProcessing.R_PLANNER]).sum(axis=-1)
+        policy_loss = torch.zeros_like(log_probs).mean()
+        reward_cost = torch.zeros_like(policy_loss)
 
-        # Final policy loss.
-        policy_loss = -torch.mean(log_probs * r_eff) * self.config['agent_pseudo_lr']
+        # only compute loss when reward_max is not zero, for saving computation
+        if self.config['planner_reward_max'] > 0.0:
+            # the effective reward is availability x awareness x r_planner
+            r_eff = (train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.AWARENESS] * train_batch[PreLearningProcessing.R_PLANNER]).sum(axis=-1)
 
-        # currently the total cost of reward is an average over all episode I don't know how to pass gradient
-        reward_cost = (((train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.R_PLANNER])**2).sum(axis=-1)**0.5).mean()
+            # Final policy loss.
+            policy_loss = -torch.mean(log_probs * r_eff) * self.config['agent_pseudo_lr']
+
+            # currently the total cost of reward is an average over all episode I don't know how to pass gradient
+            reward_cost = (((train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.R_PLANNER])**2).sum(axis=-1)**0.5).mean()
 
         model.tower_stats["planner_policy_loss"] = policy_loss
         model.tower_stats["planner_reward_cost"] = reward_cost
