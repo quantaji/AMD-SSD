@@ -73,8 +73,8 @@ WOLFPACK_ACTIONS = BASE_ACTIONS.copy()
 
 WOLFPACK_COLOR = BASE_GRID_COLOR.copy()
 WOLFPACK_COLOR.update({
-    'U': [255, 0, 0],  # Red, predator
-    'V': [255, 0, 0],  # same
+    'U': [255, 20, 147],  # DeepPink, predator wolf 1
+    'V': [238, 130, 238],  # Violet, predator wolf 2
     'W': [255, 0, 0],  # same
     'O': [255, 140, 0],  # Deep orange, for the other wolf
     'S': [0, 128, 0],  # Green for self
@@ -83,8 +83,8 @@ WOLFPACK_COLOR.update({
 WOLFPACK_COLOR.update({
     '_': [47, 79, 79],  # DarkSlateGray
     '&': [169, 169, 169],  # Dark grey
-    'u': [205, 92, 92],  # IndianRed
-    'v': [205, 92, 92],  # IndianRed
+    'u': [255, 105, 180],  # HotPink
+    'v': [221, 160, 221],  # Plum
     'w': [205, 92, 92],  # IndianRed
     's': [60, 179, 113],  # MediumSeaGreen
     'o': [255, 165, 0],  # Orange
