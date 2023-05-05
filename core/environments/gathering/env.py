@@ -61,7 +61,7 @@ class Gathering(GridWorldBase):
     agents = ['blue_p', 'red_p']
     apple_number = GATHERING_APPLE_NUMBER
     all_agents = agents.copy()
-    for i in apple_number:
+    for i in range(apple_number):
         apple_id = 'apple_'+str(i)
         all_agents.append(apple_id)
 
@@ -92,8 +92,9 @@ class Gathering(GridWorldBase):
 
         pos_choice = self.randomizer.choice(len(x), size=(len(self.agents), ), replace=False)
         ori_choice = self.randomizer.choice(4, size=(len(self.agents), ), replace=True)
+
         for i, agent in enumerate(self.agents):
-            self.agent_dict[agent].position = [x[pos_choice[i], y[pos_choice[i]]]]
+            self.agent_dict[agent].position = [x[pos_choice[i]], y[pos_choice[i]]]
             self.agent_dict[agent].orientation = ori_choice[i]
             ## reset blood, tagged time, beam etc.
             self.agent_dict[agent]._reset()
@@ -105,7 +106,7 @@ class Gathering(GridWorldBase):
         ori_choice_a = self.randomizer.choice(4, size=(self.apple_number, ), replace=True)
         for i in range(self.apple_number):
             apple_id = 'apple_'+str(i)
-            self.apple_dict[apple_id].position = [x_a[pos_choice_a[i], y_a[pos_choice_a[i]]]]
+            self.apple_dict[apple_id].position = [x_a[pos_choice_a[i]], y_a[pos_choice_a[i]]]
             self.apple_dict[apple_id].orientation = ori_choice_a[i]
             ## reset blood, tagged time, beam etc.
             self.apple_dict[apple_id]._reset()
@@ -214,7 +215,7 @@ class Gathering(GridWorldBase):
     def step(self, actions: ActionDict):
         # All agents act
         ## Get newest gridworld with beam area
-        grid_world = self.grid_world(self.base_world)
+        grid_world = self.grid_world()
         for agent_key, agent in self.agent_dict.items():
             agent.act(action=actions[agent_key],
             grid_world=grid_world)
@@ -230,7 +231,7 @@ class Gathering(GridWorldBase):
             if apple.is_eaten:
                 x_a, y_a = np.where(~np.isin(grid_world, GATHERING_APPLE_NO_ENTRY_STATE))
                 pos_choice_a = self.randomizer.choice(len(y_a), size=(1, ), replace=True)
-                apple.respawn(position=[x_a[pos_choice_a[0], y_a[pos_choice_a[0]]]])
+                apple.respawn(position=[x_a[pos_choice_a[0]], y_a[pos_choice_a[0]]])
         
         self.num_frames += 1
 
@@ -331,7 +332,7 @@ class GatheringEnv(ParallelEnv):
 
 
 def gathring_env_creator(config: Dict[str, Any] = {
-    'max_cycles': 5,
+    'max_cycles': 1240,
 }) -> GatheringEnv:
     env = GatheringEnv(
         max_cycles=config['max_cycles'],

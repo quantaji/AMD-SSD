@@ -15,8 +15,8 @@ class GatheringAgent(GridWorldAgentBase):
 
     def __init__(self, agent_id: AgentID) -> None:
         super().__init__(agent_id)
-        self.orientation(0)
-        self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
+        #self.orientation(0)
+        #self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
         self.using_beam = False
         self.is_tagged = False
         self.num_hit_by_beam = False
@@ -90,8 +90,8 @@ class GatheringApple(GridWorldAgentBase):
 
     def __init__(self, agent_id: AgentID) -> None:
         super().__init__(agent_id)
-        self.orientation(0)
-        self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
+        #self.orientation(0)
+        #self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
         self.is_eaten = False
         self.collected_time = 0.
 
