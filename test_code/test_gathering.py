@@ -10,18 +10,27 @@ import numpy as np
 from gymnasium.utils import seeding
 from PIL import Image
 
-rng, _ = seeding.np_random(114514)
+def rgb_onestep(env, action, step_number):
+    env.step(dict(zip(env.agents, action)))
+    output = env.grid_world()
+    rgb = ascii_array_to_rgb_array(output, env.ascii_color_array)
+    img = Image.fromarray(env.render()).save(f"gathering_imgs/sample{step_number}.png")
+    return env
+
+rng, _ = seeding.np_random(1145)
 a = Gathering(rng, )
 a.render_mode = 'rgb_array'
 a.reset()
-print(ascii_array_to_str(a.grid_world()))
+#print(ascii_array_to_str(a.grid_world()))
 img = Image.fromarray(a.render()).save('sample.png')
 
-out = a.step(dict(zip(a.all_agents, np.random.choice(7, size=(len(a.all_agents),)).tolist())))
-output = a.grid_world()
-# print(output)
-rgb = ascii_array_to_rgb_array(output, a.ascii_color_array)
-img = Image.fromarray(a.render()).save("sample1.png")
+# np.random.choice(7, size=(len(a.agents),)).tolist()
+a = rgb_onestep(a, (7,4), 1)
+a = rgb_onestep(a, (0,2), 2)
+a = rgb_onestep(a, (0,0), 3)
+a = rgb_onestep(a, (3,7), 4)
+a = rgb_onestep(a, (3,5), 5)
+a = rgb_onestep(a, (1,2), 6)
 
 from pettingzoo.test import parallel_api_test
 from pettingzoo.butterfly import cooperative_pong_v5
