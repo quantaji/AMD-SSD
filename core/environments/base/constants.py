@@ -15,20 +15,20 @@ ORIENTATION_CHANGE = {
 }
 
 BASE_ACTIONS = {
-    0: 'move_left',
-    1: 'move_right',
-    2: 'move_up',
-    3: 'move_down',
-    4: 'stay',
+    0: 'move_forward',  # relative
+    1: 'move_right',  # relative
+    2: 'move_back',  # relative
+    3: 'move_left',  # relative
+    4: 'stand_still',
     5: 'turn_clockwise',
     6: 'turn_counterclockwise',
 }
 
 ACTION_POSITION_CHANGE = {
-    0: np.array([0, -1]),
-    1: np.array([0, +1]),
-    2: np.array([-1, 0]),
-    3: np.array([+1, 0]),
+    0: np.array([-1, 0]),  # move absolute up 
+    1: np.array([0, +1]),  # move absolute right
+    2: np.array([+1, 0]),  # move absoulute down
+    3: np.array([0, -1]),  # move absolute left
 }
 
 ACTION_ORIENTATION_CHANGE = {
