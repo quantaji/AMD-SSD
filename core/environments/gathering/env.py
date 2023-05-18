@@ -61,25 +61,36 @@ class Gathering(GridWorldBase):
     ## Can try to add more players
     agents = ['blue_p', 'red_p']
     apple_number = GATHERING_APPLE_NUMBER
-    all_agents = agents.copy()
-    for i in range(apple_number):
-        apple_id = 'apple_'+str(i)
-        all_agents.append(apple_id)
+
+    def _baseworld_with_apple(self, base_world):
+        ## Call it every time when using base world
+        ## pos_choice: positions of apples must be set!
+        for apple_id in self.apple_dict.keys():
+            apple = self.apple_dict[apple_id]
+            if apple.is_eaten:
+                continue
+            posi = apple.position
+            base_world[posi[0], posi[1]] = GATHERING_AGENT_MAP['apple']
+        return base_world
+        
 
     def __init__(
         self,
         randomizer: np.random.Generator, 
         max_cycles: int = 1024,
+        apple_respawn: int = 1,
     ):
         self.agent_dict = {}
         self.apple_dict = {}
         for agent in self.agents:
             self.agent_dict[agent] = GatheringAgent(agent)
         
+        ## in config dict: time for apple respawn
+        self.apple_respawn = apple_respawn
         for i in range(self.apple_number):
             ## All apple has the name prefix 'apple_'
             apple_id = 'apple_'+str(i)
-            self.apple_dict[apple_id] = GatheringApple(apple_id)
+            self.apple_dict[apple_id] = GatheringApple(apple_id, self.apple_respawn)
 
         self.max_cycles = max_cycles
 
@@ -104,11 +115,11 @@ class Gathering(GridWorldBase):
         x_a, y_a = np.where(~np.isin(self.base_world, GATHERING_APPLE_NO_ENTRY_STATE))
         ## Allow overlapping
         pos_choice_a = self.randomizer.choice(len(y_a), size=(self.apple_number, ), replace=True)
-        ori_choice_a = self.randomizer.choice(4, size=(self.apple_number, ), replace=True)
+        # ori_choice_a = self.randomizer.choice(4, size=(self.apple_number, ), replace=True)
         for i in range(self.apple_number):
             apple_id = 'apple_'+str(i)
             self.apple_dict[apple_id].position = [x_a[pos_choice_a[i]], y_a[pos_choice_a[i]]]
-            self.apple_dict[apple_id].orientation = ori_choice_a[i]
+            #self.apple_dict[apple_id].orientation = ori_choice_a[i]
             ## reset blood, tagged time, beam etc.
             self.apple_dict[apple_id]._reset()
 
@@ -124,6 +135,8 @@ class Gathering(GridWorldBase):
         # load base world
         grid_world = self.base_world.copy()
 
+        # First draw apples
+        grid_world = self._baseworld_with_apple(grid_world)
         # add agent position
         for agent_id in self.agent_dict.keys():
             agent = self.agent_dict[agent_id]
@@ -132,6 +145,8 @@ class Gathering(GridWorldBase):
             posi = agent.position
             if grid_world[posi[0], posi[1]] == ' ':
                 grid_world[posi[0], posi[1]] = GATHERING_AGENT_MAP[agent_id]
+            elif grid_world[posi[0], posi[1]] == 'P':
+                grid_world[posi[0], posi[1]] = 'C'
             else:
                 grid_world[posi[0], posi[1]] = 'W'
 
@@ -144,11 +159,12 @@ class Gathering(GridWorldBase):
             if (0 <= ori_posi[0]) and (ori_posi[0] < self.world_shape[0]) and (0 <= ori_posi[1]) and (ori_posi[1] < self.world_shape[1]) and grid_world[ori_posi[0], ori_posi[1]] in GATHERING_ORIENTATION_TUNE.keys():
                 grid_world[ori_posi[0], ori_posi[1]] = GATHERING_ORIENTATION_TUNE[grid_world[ori_posi[0], ori_posi[1]]]
         
+        '''
         for apple_id in self.apple_dict.keys():
             apple = self.apple_dict[apple_id]
             if apple.is_eaten:
                 continue
-            posi, ori_posi = apple.position, apple.orientation_position
+            posi = apple.position
             if grid_world[posi[0], posi[1]] == ' ':
                 grid_world[posi[0], posi[1]] = GATHERING_AGENT_MAP['apple']
             elif grid_world[posi[0], posi[1]] in GATHERING_BEAM_PLAYER_STATE:
@@ -156,9 +172,9 @@ class Gathering(GridWorldBase):
                 grid_world[posi[0], posi[1]] = 'C'
             else: ## contains overlapping of apple and beam
                 grid_world[posi[0], posi[1]] = 'W'
-            if (0 <= ori_posi[0]) and (ori_posi[0] < self.world_shape[0]) and (0 <= ori_posi[1]) and (ori_posi[1] < self.world_shape[1]) and grid_world[ori_posi[0], ori_posi[1]] in GATHERING_ORIENTATION_TUNE.keys():
-                grid_world[ori_posi[0], ori_posi[1]] = GATHERING_ORIENTATION_TUNE[grid_world[ori_posi[0], ori_posi[1]]]
-
+            #if (0 <= ori_posi[0]) and (ori_posi[0] < self.world_shape[0]) and (0 <= ori_posi[1]) and (ori_posi[1] < self.world_shape[1]) and grid_world[ori_posi[0], ori_posi[1]] in GATHERING_ORIENTATION_TUNE.keys():
+                #grid_world[ori_posi[0], ori_posi[1]] = GATHERING_ORIENTATION_TUNE[grid_world[ori_posi[0], ori_posi[1]]]
+        '''
         # add beam area
         for agent_id in self.agent_dict.keys():
             agent = self.agent_dict[agent_id]
@@ -183,12 +199,15 @@ class Gathering(GridWorldBase):
     def observe(self, agent: AgentID) -> spaces.Space:
         # load base world 
         grid_world = self.base_world.copy()
+        grid_world = self._baseworld_with_apple(grid_world)
         ## TODO: add other apples? Or they are on the world
         # add agent
         for other_agent_key, other_agent in self.agent_dict.items():
             posi = other_agent.position
             if grid_world[posi[0], posi[1]] == ' ':
                 grid_world[posi[0], posi[1]] = GATHERING_AGENT_VIEW_TUNE[agent][GATHERING_AGENT_MAP[other_agent_key]]
+            elif grid_world[posi[0], posi[1]] in ['P']:
+                grid_world[posi[0], posi[1]] = GATHERING_AGENT_VIEW_TUNE[agent]['apple']
             else:
                 grid_world[posi[0], posi[1]] = 'W'
 
@@ -261,9 +280,13 @@ class GatheringEnv(ParallelEnv):
 
     observation_shape = (GATHERING_OBSERVATION_SHAPE[0], GATHERING_OBSERVATION_SHAPE[1], 2)
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, max_cycles=1240, apple_respawn=2, **kwargs) -> None:
 
         self._kwargs = kwargs
+        
+        ## Env parameters
+        self.max_cycles = max_cycles
+        self.apple_respawn = apple_respawn
 
         self.env: Gathering
 
@@ -285,7 +308,7 @@ class GatheringEnv(ParallelEnv):
 
     def seed(self, seed=None):
         self.randomizer, seed = seeding.np_random(seed)
-        self.env = Gathering(self.randomizer, **self._kwargs)
+        self.env = Gathering(self.randomizer, self.max_cycles, self.apple_respawn, **self._kwargs)
 
     def reset(
         self,
@@ -339,9 +362,11 @@ class GatheringEnv(ParallelEnv):
 
 def gathring_env_creator(config: Dict[str, Any] = {
     'max_cycles': 1240,
+    'apple_respawn': 3,
 }) -> GatheringEnv:
     env = GatheringEnv(
         max_cycles=config['max_cycles'],
+        apple_respawn=config['apple_respawn']
     )
     env.convert_to_rllib_env = True
     return env
