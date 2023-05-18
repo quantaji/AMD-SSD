@@ -1,14 +1,16 @@
 """
 PyTorch policy class used for AMD.
 """
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
+from ray.rllib.evaluation import Episode
 import torch
 import torch.nn as nn
 from gymnasium import spaces
 from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
 from ray.rllib.evaluation.episode import Episode
-from ray.rllib.evaluation.postprocessing import Postprocessing, compute_gae_for_sample_batch
+from ray.rllib.evaluation.postprocessing import (Postprocessing, compute_gae_for_sample_batch)
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch import torch_modelv2
@@ -16,10 +18,12 @@ from ray.rllib.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.numpy import convert_to_numpy
-from ray.rllib.utils.typing import TensorType
+from ray.rllib.utils.typing import TensorStructType, TensorType
 from torch.func import functional_call, jacrev
+from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 
 from .constants import PreLearningProcessing
+from .utils import action_to_reward
 
 
 class AMDAgent:
@@ -40,6 +44,8 @@ class AMDAgent:
 
 
 class AMDPlanner:
+
+    appearance: np.ndarray = None  # this variable indicates which individual agent appears in game, used for reward calculation
 
     def loss_central_planner(
         self,
@@ -72,16 +78,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
     """Pytorch policy class used for Adaptive Mechanism design."""
 
     model: nn.Module
-
     agent_info_space: spaces.Space  # used for agent to collect reward from central planner
-
-    def __init__(self, observation_space, action_space, config):
-        # TODO remove this: put it into config
-
-        super().__init__(observation_space, action_space, config)
-
-        # TODO remove this: put it into config
-        self.config['policy_param'] = 'neural'
 
     @override(A3CTorchPolicy)
     def stats_fn(self, train_batch: SampleBatch) -> Dict[str, TensorType]:
@@ -104,7 +101,6 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         other_agent_batches: Dict[Any, SampleBatch] | None = None,
         episode: Episode | None = None,
     ) -> SampleBatch:
-        sample_batch = super().postprocess_trajectory(sample_batch)
 
         if not self.is_central_planner:
             # ! STEP 1: calculate gae, this will add ADVANTAGEs and VALUE_TAEGETS into this batch
@@ -113,9 +109,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
             # ! STEP 2: placeholder for reward from planner, this is for skipping Policy._initialize_loss_from_dummy_batch().
             # Since the default class is agent, we only have to pass a r_planner term
-            sample_batch[PreLearningProcessing.R_PLANNER] = 0 * sample_batch[SampleBatch.REWARDS]
-
-            sample_batch[PreLearningProcessing.AWARENESS] = 0 * sample_batch[SampleBatch.REWARDS]
+            sample_batch[PreLearningProcessing.R_PLANNER_CUM] = 0 * sample_batch[SampleBatch.REWARDS]
 
         return sample_batch
 
@@ -137,11 +131,14 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
         log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])
 
-        # total rewards = GAE of critic + reward by planner
-        total_rewards = train_batch[Postprocessing.ADVANTAGES] + train_batch[PreLearningProcessing.R_PLANNER]
+        # the loss contains two parts, first the real rewards, by critit
+        # and the second: the reward from central planner
+        pg_r_real = -torch.sum(log_probs * train_batch[Postprocessing.ADVANTAGES])
+        # ps: if this agent is not in cooperative list, its r_planner_cum is zero
+        pg_r_planner = -torch.sum(log_probs * train_batch[PreLearningProcessing.R_PLANNER_CUM])
 
         # Final policy loss.
-        policy_loss = -torch.mean(log_probs * total_rewards)
+        policy_loss = pg_r_real + pg_r_planner
 
         # Compute a value function loss.
         if self.config["use_critic"]:
@@ -154,62 +151,9 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         model.tower_stats["agent_policy_loss"] = policy_loss
         model.tower_stats["agent_value_loss"] = value_loss
 
-        return policy_loss
+        total_loss = policy_loss + self.config['vf_loss_coeff'] * value_loss
 
-    def compute_awareness(self, sample_batch: SampleBatch):
-        """This function computes the awareness for each agent"""
-        if (not self.is_central_planner) and self.config['planner_reward_max'] > 0.0:
-
-            # get ready for calculating awareness
-            copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
-            awareness = torch.zeros(copied_batch[SampleBatch.REWARDS].shape, device=self.device)
-            if self.config['param_assumption'] == 'neural':
-                """
-                Agents do policy gradient with assumtion of neural network parameterization
-                """
-
-                def func_call_log_probs_along_traj(params, input_batch: SampleBatch):
-                    dist_input, _ = functional_call(self.model, params, input_batch)
-                    action_dist = self.dist_class(dist_input, self.model)
-                    log_probs = action_dist.logp(input_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
-                    return log_probs
-
-                dict_params = dict(self.model.named_parameters())
-                jac_logp_theta = jacrev(
-                    lambda params: func_call_log_probs_along_traj(params=params, input_batch=copied_batch),
-                    argnums=0,
-                )(dict_params)  # a dict with each element of shape (Batch, (shape_params))
-
-                for param in dict_params.keys():
-                    """
-                    first accumlate over all advantage,
-                    chagne to ((shape_params), Batch) for broadcasting.
-                    NOTE 1: multiplication btw torch tensor and np array, tensor as front!
-                    NOTE 2: unlike a3c algorithm, I didnot consider the case of model is recurrent.
-                    """
-                    agent_pg = torch.sum(jac_logp_theta[param].movedim(0, -1) * copied_batch[Postprocessing.ADVANTAGES], dim=-1)  # (shape_params,)
-                    awareness_unsummed = agent_pg * jac_logp_theta[param]  # (Batch, (shape_params))
-                    awareness = awareness + awareness_unsummed.view(awareness_unsummed.shape[0], -1).sum(dim=-1)
-
-            elif self.config['param_assumption'] == 'softmax':
-                """
-                Agents do policy gradient with assumtion of softmax parameterizization. In this case:
-                    paital{logp(a, s)}{theta(a', s')} = 1{s=s', a=a'} - pi(a', s)1{s=s'}
-                Therefore, we only need to return jacobian(logp, theta) as tensor:
-                    1 - pi(a, s)
-                of shape (Batch, num_actions).
-                NOTE: 'softmax' option natually assumes a multinomial distribution, so the model's output is assumed to be the logits.
-                NOTE: Determining state is equal or not is difficult for me, so I assume every input state is not equal, therefore, the result is simply g_log_p(s)^2.sum x advantage
-                """
-                logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
-                g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
-                awareness = (g_logp_s * g_logp_s).sum(dim=1) * copied_batch[Postprocessing.ADVANTAGES]
-            else:
-                raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
-
-            sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
-
-        return sample_batch
+        return total_loss
 
     def loss_central_planner(
         self,
@@ -220,26 +164,126 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
         # Pass the training data through our model to get distribution parameters.
         dist_inputs, _ = model(train_batch)
-        # Create an action distribution object.
-        action_dist = dist_class(dist_inputs, model)
-        # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
-        log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])  # shape (Batch, )
 
-        policy_loss = torch.zeros_like(log_probs, requires_grad=True).mean()
+        policy_loss = torch.zeros_like(dist_inputs, requires_grad=True).mean()
         reward_cost = torch.zeros_like(policy_loss, requires_grad=True)
 
         # only compute loss when reward_max is not zero, for saving computation
         if self.config['planner_reward_max'] > 0.0:
-            # the effective reward is availability x awareness x r_planner
-            r_eff = (train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.AWARENESS] * train_batch[PreLearningProcessing.R_PLANNER]).sum(axis=-1)
 
-            # Final policy loss.
-            policy_loss = -torch.mean(log_probs * r_eff) * self.config['agent_pseudo_lr']
+            # Create an action distribution object.
+            action_dist = dist_class(dist_inputs, model)
 
-            # currently the total cost of reward is an average over all episode I don't know how to pass gradient
-            reward_cost = (((train_batch[PreLearningProcessing.AVAILABILITY] * train_batch[PreLearningProcessing.R_PLANNER])**2).sum(axis=-1)**0.5).mean()
+            # Compute the actual actions
+            actions = action_dist.deterministic_sample()
+
+            # get reward from actions
+            r_planner = action_to_reward(
+                actions=actions,
+                appearance=self.appearance,
+                reward_max=self.config['planner_reward_max'],
+                zero_sum=self.config['force_zero_sum'],
+                availability=train_batch[PreLearningProcessing.AVAILABILITY],
+            )
+
+            # get the matrix for computing accumulated reward
+            r_planner_cum = train_batch[PreLearningProcessing.DISCOUNTED_FACTOR_MATRIX] @ r_planner
+
+            policy_loss = -torch.mean(train_batch[PreLearningProcessing.AWARENESS] * r_planner_cum)
+            reward_cost = ((r_planner**2).sum(-1)**0.5).mean()
 
         model.tower_stats["planner_policy_loss"] = policy_loss
         model.tower_stats["planner_reward_cost"] = reward_cost
 
-        return policy_loss
+        total_loss = policy_loss + self.config['planner_reward_cost'] * reward_cost
+
+        return total_loss
+
+    def compute_central_planner_actions(self, sample_batch: SampleBatch) -> np.ndarray:
+        """This function computes the r_planner, since we cannot truct on rllib's sample, because they might use exploration config.
+        """
+        if not self.is_central_planner:
+            raise ValueError  # this can only happen to central planner
+
+        copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
+        dist_input, _ = self.model(copied_batch)
+        action_dist = self.dist_class(dist_input, self.model)
+        actions = action_dist.deterministic_sample()
+
+        return actions.detach().cpu().numpy()
+
+    def compute_awareness(self, sample_batch: SampleBatch) -> SampleBatch:
+        """This funciton compute the 'awareness' of an agent.
+
+            The awareness is a intermediate value used in total value function approximation. In the policy gradient approximation, 
+                V_j = Prod_{i,t} pi_i(t) x R_j.
+            and the gradient is 
+                nabla_i V_j = (sum_t nabla_i log pi_i(t)) x R_j.
+            and policy gradient theorem, we can replace R_j with advantage function
+                nabla_i V_j = sum_t ( (nabla_i log pi_i(t)) x delta_{j, t} )
+            Then the total value function's gradient is
+                nabla_i V = sum_t ( (nabla_i log pi_i(t)) x (sum_j delta_{j, t}) )
+            The AWARENESS is defined as
+                a_{t,i} = (nabla_i V)^T x (nabla_i log pi_i(t))
+                        = sum_t' ( (nabla_i log pi_i(t')) x (sum_j delta_{j, t'}) )^T x (nabla_i log pi_i(t))
+            The awareness is used for latter update of central planner
+                Delta theta_p = sum_{i, t} a_{t, i} x nabla_p R^p_{t, i}
+            where R^p_{t,i} is the accumlated total reward.
+        """
+        # planner_reward_max means no planner's reward, so we skip this for faster computation
+        if self.is_central_planner or self.config['planner_reward_max'] == 0.0:
+            return sample_batch
+
+        # get ready for calculating awareness
+        copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
+        awareness = torch.zeros(copied_batch[SampleBatch.REWARDS].shape, device=self.device)
+
+        if self.config['param_assumption'] == 'neural':
+            """
+            Agents do policy gradient with assumtion of neural network parameterization
+            """
+
+            def func_call_log_probs_along_traj(params, input_batch: SampleBatch):
+                dist_input, _ = functional_call(self.model, params, input_batch)
+                action_dist = self.dist_class(dist_input, self.model)
+                log_probs = action_dist.logp(input_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
+                return log_probs
+
+            dict_params = dict(self.model.named_parameters())
+            jac_logp_theta = jacrev(
+                lambda params: func_call_log_probs_along_traj(params=params, input_batch=copied_batch),
+                argnums=0,
+            )(dict_params)  # the jacobian is a dict with each element of shape (Batch, (shape_params))
+
+            for param in dict_params.keys():
+                """
+                first accumlate over all advantage,
+                chagne to ((shape_params), Batch) for broadcasting.
+                NOTE 1: pairwise multiplication btw torch tensor and np array, tensor as front!
+                NOTE 2: unlike a3c algorithm, I didnot consider the case of model is recurrent.
+                """
+                agent_pg = torch.sum(jac_logp_theta[param].movedim(0, -1) * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(1, -1), dim=-1)  # (shape_params,)
+                awareness_unsummed = jac_logp_theta[param] * agent_pg  # (Batch, (shape_params, ))
+                awareness += awareness_unsummed.view(awareness_unsummed.shape[0], -1).sum(dim=-1)
+
+        elif self.config['param_assumption'] == 'softmax':
+            """
+            Agents do policy gradient with assumtion of softmax parameterizization. In this case:
+                p(a, s) = softmax(theta(a', s)) (a)
+                paital{logp(a, s)}{theta(a', s')} = 1{s=s', a=a'} - pi(a', s)1{s=s'}
+            Therefore, we only need to return jacobian(logp, theta) as tensor:
+                1 - pi(a, s)
+            of shape (Batch, num_actions).
+            NOTE: 'softmax' option natually assumes a multinomial distribution, so the model's output is assumed to be the logits.
+            NOTE: Determining state is equal or not is difficult for me, so I assume every input state is not equal, therefore, the result is simply g_log_p(s)^2.sum x total_advantage
+            """
+            logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
+            g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
+            awareness += (g_logp_s**2).sum(dim=-1) * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1)
+
+        else:
+            raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
+
+        sample_batch[PreLearningProcessing.AWARENESS] = awareness.detach().cpu().numpy()
+
+        return sample_batch

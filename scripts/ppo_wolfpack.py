@@ -30,18 +30,14 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
         self.model = nn.Sequential(
             nn.Flatten(start_dim=1, end_dim=-1),
-            nn.Linear(self.obs_total_dim, 1024),
+            nn.Linear(self.flattened_obs_space.shape[0], 128),
             nn.ReLU(),
-            nn.Linear(1024, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(128, 32),
             nn.ReLU(),
         )
 
-        self.policy_fn = nn.Linear(512, num_outputs)
-        self.value_fn = nn.Linear(512, 1)
+        self.policy_fn = nn.Linear(32, num_outputs)
+        self.value_fn = nn.Linear(32, 1)
 
     def forward(self, input_dict, state, seq_lens):
         # print('-----*****-----*****-----', self.obs_total_dim, input_dict["obs"].flatten(start_dim=1, end_dim=-1).shape)
@@ -97,6 +93,7 @@ if __name__ == "__main__":
         "PPO",
         name="PPO",
         stop={"timesteps_total": 5000000},
+        keep_checkpoints_num=3,
         checkpoint_freq=10,
         local_dir="~/ray_results/" + env_name,
         config=config.to_dict(),

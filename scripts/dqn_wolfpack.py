@@ -7,6 +7,7 @@ import ray
 import torch
 from gymnasium import spaces
 from ray import tune
+from ray.rllib.algorithms.dqn import DQN, DQNConfig
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.tune.registry import register_env
@@ -17,7 +18,8 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 
 from core.algorithms.amd.amd import AMD, AMDConfig
-from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
+from core.algorithms.amd.wrappers import \
+    MultiAgentEnvFromPettingZooParallel as P2M
 from core.environments.wolfpack.env import wolfpack_env_creator
 
 
@@ -33,18 +35,14 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
         self.model = nn.Sequential(
             nn.Flatten(start_dim=1, end_dim=-1),
-            nn.Linear(self.flattened_obs_space.shape[0], 1024),
+            nn.Linear(self.flattened_obs_space.shape[0], 128),
             nn.ReLU(),
-            nn.Linear(1024, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(128, 32),
             nn.ReLU(),
         )
 
-        self.policy_fn = nn.Linear(512, num_outputs)
-        self.value_fn = nn.Linear(512, 1)
+        self.policy_fn = nn.Linear(32, num_outputs)
+        self.value_fn = nn.Linear(32, 1)
 
     def forward(self, input_dict, state, seq_lens):
         model_out = self.model(input_dict["obs"].to(torch.float32) / 255)
@@ -68,12 +66,26 @@ if __name__ == "__main__":
     )
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
-    config = AMDConfig().environment(
+    config = DQNConfig()
+    # explore_config = config.exploration_config.update({
+    #     "initial_epsilon": 1.0,
+    #     "final_epsilon": 0.01,
+    #     "epsilone_timesteps": 5000,
+    # })
+
+    config = config.multi_agent(
+        policies=['predator', 'prey'],
+        policy_mapping_fn=(lambda agent_id, *args, **kwargs: {
+            'wolf_1': 'predator',
+            'wolf_2': 'predator',
+            'prey': 'prey',
+        }[agent_id]),
+    ).environment(
         env=env_name,
         env_config={
             'r_lone': 1.0,
             'r_team': 5.0,
-            'r_prey': 0.001,
+            'r_prey': 0.0,
             'coop_radius': 4,
             'max_cycles': 1024,
         },
@@ -89,20 +101,20 @@ if __name__ == "__main__":
         train_batch_size=1024,
         lr=2e-5,
         gamma=0.99,
-        coop_agent_list=['wolf_1', 'wolf_2'],
-        # planner_reward_max=0.1,
-        planner_reward_max=0.0,
-        force_zero_sum=False,
-        param_assumption='neural',
+        v_min=0.0,
+        v_max=10.0,
+        # double_q=True,
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,
     )
+    # .exploration(exploration_config=explore_config)
+
+    # print(config.exploration_config)
 
     tune.run(
-        AMD,
-        # name="amd_with_r_planner_max=0.1",
-        name="actor_critic_with_no_planner",
+        DQN,
+        name='dqn',
         stop={"timesteps_total": 5000000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,

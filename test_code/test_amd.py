@@ -34,18 +34,14 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
         self.model = nn.Sequential(
             nn.Flatten(start_dim=1, end_dim=-1),
-            nn.Linear(self.flattened_obs_space.shape[0], 1024),
+            nn.Linear(self.flattened_obs_space.shape[0], 128),
             nn.ReLU(),
-            nn.Linear(1024, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(128, 32),
             nn.ReLU(),
         )
 
-        self.policy_fn = nn.Linear(512, num_outputs)
-        self.value_fn = nn.Linear(512, 1)
+        self.policy_fn = nn.Linear(32, num_outputs)
+        self.value_fn = nn.Linear(32, 1)
 
     def forward(self, input_dict, state, seq_lens):
         # print('-----*****-----*****-----', self.obs_total_dim, input_dict["obs"].flatten(start_dim=1, end_dim=-1).shape)
@@ -92,7 +88,7 @@ if __name__ == "__main__":
         coop_agent_list=['wolf_1', 'wolf_2'],
         planner_reward_max=0.5,
         force_zero_sum=True,
-        param_assumption='softmax',
+        param_assumption='neural',
     ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,
