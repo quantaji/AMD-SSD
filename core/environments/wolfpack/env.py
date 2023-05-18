@@ -13,7 +13,7 @@ from ..utils import (
     ascii_dict_to_color_array,
     ascii_list_to_array,
 )
-from .agent import WolfpackAgent, MatrixgameAgent
+from .agent import WolfpackAgent
 from .constants import (
     WOLFPACK_ACTIONS,
     WOLFPACK_AGENT_MAP,
