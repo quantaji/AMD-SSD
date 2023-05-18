@@ -3,7 +3,7 @@ from pettingzoo.utils.env import (
     ActionType,
     AgentID,
 )
-from core.environments.gathering.constants import GATHERING_NO_ENTRY_STATE, GATHERING_MAP_SIZE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME
+from core.environments.gathering.constants import GATHERING_NO_ENTRY_STATE, GATHERING_MAP_SIZE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME, GATHERING_APPLE_RESPAWN
 from core.environments.base.constants import *
 
 import numpy as np
@@ -31,7 +31,6 @@ class GatheringAgent(GridWorldAgentBase):
         self.tagged_time = 0
         self.apple_eaten = 0
 
-    @property
     def current_front(self):
         return self._position, self._orientation
 
@@ -58,10 +57,10 @@ class GatheringAgent(GridWorldAgentBase):
             self.tagged_time = GATHERING_TAGGED_TIME
     
     def recover(self):
-        self.tagged_time -= 1
-        if self.tagged_time == 0:
+        if self.tagged_time == 1:
             self.respawn()
             return
+        self.tagged_time -= 1
 
     
     def respawn(self):
@@ -70,6 +69,8 @@ class GatheringAgent(GridWorldAgentBase):
 
     def act(self, action: ActionType, grid_world: np.ndarray):
         ## First check agent state
+        ## If use beam in the last round, use it to convert it back
+        self.using_beam = False
         if self.check_tagged():
             ## player will come back to the original place in next round
             self.recover()
@@ -94,17 +95,24 @@ class GatheringApple(GridWorldAgentBase):
         #self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
         self.is_eaten = False
         self.collected_time = 0.
+        ## Just counter for apple to record the number get eaten
+        self.eaten_time = 0
+        self.respawn_time_frame = 0
 
-    def respawn(self, position):
-        self.orientation(0)
-        self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
-        self.is_eaten = False
-        self.collected_time = 0.
+    def respawn(self, position, current_time_frame):
+        #self.orientation(0)
+        if self.respawn_time_frame == current_time_frame:
+            self.position = position
+            self.is_eaten = False
+            self.collected_time = 0.
+            self.respawn_time_frame = 0.
 
     def _reset(self):
         self.is_eaten = False
         self.collected_time = 0.
+        self.respawn_time_frame = 0
     
     def get_collected(self, time):
         self.is_eaten = True
         self.collected_time = time
+        self.respawn_time_frame = time + GATHERING_APPLE_RESPAWN

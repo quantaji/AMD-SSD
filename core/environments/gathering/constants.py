@@ -109,7 +109,7 @@ GATHERING_COLOR = BASE_GRID_COLOR.copy()
 GATHERING_COLOR.update({
     'U': [0, 0, 255],  # blue player
     'V': [255, 0, 0],  # red player
-    'W': [102, 0, 204],  # purple, overlapp
+    'W': [102, 0, 204],  # purple, overlapp, also contains apple and orientation
     'O': [255, 140, 0],  # Deep orange, for the opponent
     'S': [0, 255, 255],  # light blue for self
     'P': [0, 255, 0],  # green for apples
@@ -134,11 +134,36 @@ GATHERING_COLOR.update({
 
 ## USER CONFIGURATIONS
 GATHERING_FPS = 5
-GATHERING_RESOLUTION = [2500, 1500]  # [width, hight]
-GATHERING_MAP_SIZE = (50,30)
+GATHERING_RESOLUTION = [1200, 700]  # [width, hight]
+GATHERING_MAP_SIZE = (30,20)
 GATHERING_PLAYER_BLOOD = 2
-GATHERING_TAGGED_TIME = 5
-GATHERING_APPLE_NUMBER = 5
+GATHERING_TAGGED_TIME = 2
+GATHERING_APPLE_NUMBER = 3
+GATHERING_APPLE_RESPAWN = 3
+## 30*20 map
+GATHERING_MAP = [
+    '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+    '@@@@@                   @@@@@@@@@@@',
+    '@@                               @@',
+    '@@           @@                  @@',
+    '@@                               @@',
+    '@@                   @           @@',
+    '@@                 @@            @@',
+    '@@    @@@     @                  @@',
+    '@@    @@@                        @@',
+    '@@    @@@                        @@',
+    '@@                               @@',
+    '@@    @@@@@                      @@',
+    '@@                               @@',
+    '@@         @@@@                  @@',
+    '@@                               @@',
+    '@@                   @@@         @@',
+    '@@   @@@@@@                      @@',
+    '@@                      @@       @@',
+    '@@                               @@',
+    '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+]
+''' 50*30 map
 GATHERING_MAP = [
     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
     '@@@@@@@                            @@@@@@@@@@@@@@@',
@@ -171,3 +196,4 @@ GATHERING_MAP = [
     '@@                                              @@',
     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
 ]
+'''
