@@ -1,3 +1,4 @@
+from builtins import breakpoint
 from dataclasses import replace
 from importlib.metadata import metadata
 from typing import (
@@ -145,6 +146,8 @@ class Gathering(GridWorldBase):
         
         for apple_id in self.apple_dict.keys():
             apple = self.apple_dict[apple_id]
+            if apple.is_eaten:
+                continue
             posi, ori_posi = apple.position, apple.orientation_position
             if grid_world[posi[0], posi[1]] == ' ':
                 grid_world[posi[0], posi[1]] = GATHERING_AGENT_MAP['apple']
@@ -163,7 +166,7 @@ class Gathering(GridWorldBase):
                 continue
             if agent.using_beam:
                 posi, orii = agent.current_front()
-                next_pos = posi + GATHERING_ORIENTATION_CHANGE(orii)
+                next_pos = posi + GATHERING_ORIENTATION_CHANGE[orii]
                 not_stop = (grid_world[next_pos[0], next_pos[1]] not in GATHERING_NO_ENTRY_STATE)
                 while not_stop:
                     if grid_world[next_pos[0], next_pos[1]] == ' ':
@@ -172,7 +175,7 @@ class Gathering(GridWorldBase):
                         grid_world[next_pos[0], next_pos[1]] = 'W'
                     else: #one question: for C, now set it to not collected
                         grid_world[next_pos[0], next_pos[1]] = 'F'
-                    next_pos = next_pos+ GATHERING_ORIENTATION_CHANGE(orii)
+                    next_pos = next_pos+ GATHERING_ORIENTATION_CHANGE[orii]
                     not_stop = (grid_world[next_pos[0], next_pos[1]] not in GATHERING_NO_ENTRY_STATE)
 
         return grid_world
@@ -180,7 +183,7 @@ class Gathering(GridWorldBase):
     def observe(self, agent: AgentID) -> spaces.Space:
         # load base world 
         grid_world = self.base_world.copy()
-
+        ## TODO: add other apples? Or they are on the world
         # add agent
         for other_agent_key, other_agent in self.agent_dict.items():
             posi = other_agent.position
@@ -224,14 +227,17 @@ class Gathering(GridWorldBase):
         for apple_id, apple in self.apple_dict.items():
             apple_pos = apple.position
             if grid_world[apple_pos[0], apple_pos[1]] == 'C':
-                apple.get_collected()
+                apple.get_collected(self.num_frames)
                 ## can log collected time
                 ## Here record the reward
-                self.rewards[apple_id] += 1
+      
+                apple.eaten_time += 1
             if apple.is_eaten:
                 x_a, y_a = np.where(~np.isin(grid_world, GATHERING_APPLE_NO_ENTRY_STATE))
-                pos_choice_a = self.randomizer.choice(len(y_a), size=(1, ), replace=True)
-                apple.respawn(position=[x_a[pos_choice_a[0]], y_a[pos_choice_a[0]]])
+                ## not use randomizer, to ensure not always respawn in the same place
+                pos_choice_a = np.random.choice(len(y_a), size=(1, ), replace=True)
+                
+                apple.respawn(position=[x_a[pos_choice_a[0]], y_a[pos_choice_a[0]]], current_time_frame=self.num_frames)
         
         self.num_frames += 1
 
@@ -241,7 +247,7 @@ class Gathering(GridWorldBase):
             if grid_world[posi[0],posi[1]] == 'C':
                 self.rewards[agent_key] = agent.apple_eaten
         if self.num_frames >= self.max_cycles:
-            self.truncations = dict(zip(self.all_agents, [True] * len(self.all_agents)))
+            self.truncations = dict(zip(self.agents, [True] * len(self.agents)))
         
         if self.render_on:
             pygame.event.pump()
@@ -264,8 +270,8 @@ class GatheringEnv(ParallelEnv):
         self.seed()
 
         self.render_mode = self.env.render_mode
-        self.possible_agents = self.env.all_agents[:]
-        self.agents = self.env.all_agents[:]
+        self.possible_agents = self.env.agents[:]
+        self.agents = self.env.agents[:]
 
         # spaces
         self.observation_spaces = {}

@@ -25,10 +25,14 @@ BASE_ACTIONS = {
 }
 
 ACTION_POSITION_CHANGE = {
-    0: np.array([-1, 0]),  # move absolute up 
-    1: np.array([0, +1]),  # move absolute right
-    2: np.array([+1, 0]),  # move absoulute down
-    3: np.array([0, -1]),  # move absolute left
+    #0: np.array([0, -1]),
+    #1: np.array([0, +1]),
+    #2: np.array([-1, 0]),
+    #3: np.array([+1, 0]),
+    0: np.array([-1, 0]),
+    1: np.array([0, +1]),
+    2: np.array([+1, 0]),
+    3: np.array([0, -1]),
 }
 
 ACTION_ORIENTATION_CHANGE = {
