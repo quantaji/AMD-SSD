@@ -49,6 +49,9 @@ class AMDConfig(A3CConfig):
         self.grad_on_reward: bool = False
         self.planner_reward_cost: float = 0.0
 
+        # we don't sample async so
+        self.sample_async = False
+
         ModelCatalog.register_custom_action_dist(TANH_DETERMINISTIC_DISTRIBUTION, TanhTorchDeterministic)
 
     @override(A3CConfig)

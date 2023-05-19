@@ -8,11 +8,15 @@ tensorflow-probability
 
 ## RL libs
 ray[rllib]==2.3.1
+ray[default]==2.3.1 # for cluster running
 gymnasium # gymnasium is used by ray, its version depends on ray
-# pettingzoo # another package for multi-agent-rl, both pettingzoo and gymnasium is maintained by Farama-Foundation
+pettingzoo # another package for multi-agent-rl, both pettingzoo and gymnasium is maintained by Farama-Foundation
 # minigrid # another farama's package for easy implementing grid-world games
 # tianshou # this is another RL training framework, more light-weighted than rllib
 ## PS: pytorch lighning is not an ideal RL training framework we should not use this, rllib have its own trainner.
+
+# environment related
+pygame
 
 # others, for visualization and others
 numpy

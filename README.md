@@ -27,7 +27,7 @@ deactivate
 ```
 To install python packages, after activation, run
 ```sh
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --cache-dir ${SCRATCH}/pip_cache
 ```
 
 ## Local setup
@@ -110,3 +110,6 @@ ${work_dir}/.venv/bin/python main.py fit \
     --data.init_args.tokenizer_dir "${experiement_dir}/${experiment_name}"
 
 ```
+
+## Ray on SLURM
+See [here](https://docs.ray.io/en/latest/cluster/vms/user-guides/community/slurm.html#slurm-network-ray).
