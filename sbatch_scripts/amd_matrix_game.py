@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 import gymnasium as gym
 import numpy as np
@@ -18,7 +19,6 @@ if module_path not in sys.path:
 
 from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
-# from core.environments.wolfpack.env import wolfpack_env_creator
 from core.environments.simple_games.matrix_game import matrix_game_env_creator
 
 
@@ -53,11 +53,45 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
 
 if __name__ == "__main__":
-    ray.init()
+    parser = argparse.ArgumentParser(description="Ray rllib training.")
+    parser.add_argument(
+        "--cuda",
+        action="store_true",
+        default=False,
+        help="Enables GPU training")
+    parser.add_argument(
+        "--ray-address",
+        help="Address of Ray cluster for seamless distributed execution.")
+    parser.add_argument(
+        "--server-address",
+        type=str,
+        default=None,
+        required=False,
+        help="The address of server to connect to if using "
+        "Ray Client.")
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=4,
+        required=False,
+        help="The number of remote workers used by this algorithm. Default 0, means using local worker.")
+    args, _ = parser.parse_known_args()
+    
+    tmp_dir = os.getenv('ray_temp_dir') or os.path.join(str(os.getenv('SCRATCH')), '.tmp_ray')
+
+    if args.server_address:
+        ray.init(f"ray://{args.server_address}", _temp_dir=tmp_dir)
+    elif args.ray_address:
+        ray.init(address=args.ray_address, _temp_dir=tmp_dir)
+    else:
+        ray.init(address='auto', _redis_password=os.environ['redis_password'], _temp_dir=tmp_dir)
 
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
     env_name = 'fear_greed_matrix_game'
+
+    print('number of workers: ', args.num_workers)
+    print('number of gpus: ', int(os.environ.get("RLLIB_NUM_GPUS", "0")))
 
     register_env(
         env_name,
@@ -73,8 +107,7 @@ if __name__ == "__main__":
         },
         clip_actions=True,
     ).rollouts(
-        num_rollout_workers=4,
-        rollout_fragment_length=128,
+        num_rollout_workers=args.num_workers,
     ).training(
         model={
             "custom_model": "SimpleMLPModelV2",
@@ -88,16 +121,15 @@ if __name__ == "__main__":
         param_assumption='neural',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-        num_cpus_per_worker=3,
+        num_cpus_per_worker=1,
     )
 
     tune.run(
         AMD,
-        # name="amd_with_r_planner_max=0.1",
-        name="actor_critic_with_no_planner",
+        name="cluster",
         stop={"timesteps_total": 500000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
-        local_dir="~/ray_results/" + env_name,
+        local_dir= os.path.join(str(os.getenv('SCRATCH')), 'ray_results', env_name),
         config=config.to_dict(),
     )
