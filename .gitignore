@@ -158,3 +158,6 @@ Temporary Items
 
 # venv folder
 forl-proj/
+
+# model output
+*.out
