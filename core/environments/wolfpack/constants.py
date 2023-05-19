@@ -60,12 +60,12 @@ WOLFPACK_NO_ENTRY_STATE = [
 ]
 
 WOLFPACK_STATE_SHAPE = (20, 20)
-WOLFPACK_OBSERVATION_SHAPE = (11, 17)
+WOLFPACK_OBSERVATION_SHAPE = (16, 21)
 WOLFPACK_ORIENTATION_BOUNDING_BOX = {  # x_min, x_max, y_min, y_max offset
-    0: [-10, 0, -8, +8],  # up
-    1: [-8, +8, 0, +10],  # right
-    2: [0, +10, -8, +8],  # down
-    3: [-8, +8, -10, 0],  # left
+    0: [-15, 0, -10, +10],  # up
+    1: [-10, +10, 0, +15],  # right
+    2: [0, +15, -10, +10],  # down
+    3: [-10, +10, -15, 0],  # left
 }
 WOLFPACK_FPS = 5
 WOLFPACK_RESOLUTION = [960, 960]  # [width, hight]

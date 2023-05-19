@@ -1,19 +1,9 @@
 from ..base.constants import BASE_GRID_STATE, BASE_GRID_COLOR, BASE_ACTIONS, ORIENTATION_CHANGE
 
 GATHERING_STATE = BASE_GRID_STATE.copy()
-GATHERING_STATE.update({
-    'U': 'blue_p',
-    'V': 'red_p',
-    'W': 'two players at same position',
-    'S': 'agent self',
-    'O': 'opponent',
-    'P': 'apple',
-    'F': 'beam and player',
-    'B': 'beam',
-    'C': 'apple and player'
-})
+GATHERING_STATE.update({'U': 'blue_p', 'V': 'red_p', 'W': 'two players at same position', 'S': 'agent self', 'O': 'opponent', 'P': 'apple', 'F': 'beam and player', 'B': 'beam', 'C': 'apple and player'})
 GATHERING_AGENT_MAP = {
-    'blue_p': 'U', 
+    'blue_p': 'U',
     'red_p': 'V',
     'apple': 'P',
 }
@@ -53,9 +43,9 @@ GATHERING_STATE.update({
     'c': 'apple and player'
 })
 GATHERING_ORIENTATION_TUNE = {
-    ' ': '_', #empty
-    '0': '&', #void
-    '@': '&', #wall
+    ' ': '_',  #empty
+    '0': '&',  #void
+    '@': '&',  #wall
     'U': 'u',
     'V': 'v',
     'W': 'w',
@@ -67,7 +57,7 @@ GATHERING_ORIENTATION_TUNE = {
     'C': 'c',
 }
 GATHERING_NO_ENTRY_STATE = [
-    '@', 
+    '@',
     '0',
     '&',
 ]
@@ -82,9 +72,9 @@ GATHERING_APPLE_NO_ENTRY_STATE = [
     'S',
     'O',
 ]
-## For display overlapping of beam and player(F) 
+## For display overlapping of beam and player(F)
 # and player and apple -> 'C'; perhaps not used
-GATHERING_BEAM_PLAYER_STATE = [ 
+GATHERING_BEAM_PLAYER_STATE = [
     'U',
     'V',
     'W',
@@ -92,12 +82,12 @@ GATHERING_BEAM_PLAYER_STATE = [
     'O',
 ]
 
-GATHERING_OBSERVATION_SHAPE = (11, 17)
+GATHERING_OBSERVATION_SHAPE = (16, 21)
 GATHERING_ORIENTATION_BOUNDING_BOX = {  # x_min, x_max, y_min, y_max offset
-    0: [-10, 0, -8, +8],  # up
-    1: [-8, +8, 0, +10],  # right
-    2: [0, +10, -8, +8],  # down
-    3: [-8, +8, -10, 0],  # left
+    0: [-15, 0, -10, +10],  # up
+    1: [-10, +10, 0, +15],  # right
+    2: [0, +15, -10, +10],  # down
+    3: [-10, +10, -15, 0],  # left
 }
 
 GATHERING_ACTIONS = BASE_ACTIONS.copy()
@@ -113,9 +103,9 @@ GATHERING_COLOR.update({
     'O': [255, 140, 0],  # Deep orange, for the opponent
     'S': [0, 255, 255],  # light blue for self
     'P': [0, 255, 0],  # green for apples
-    'F': [255, 255, 204], # light yellow for beam&player
-    'B': [255, 255, 0], # yellow for beam
-    'C': [100, 30, 30], # brown for collect apple
+    'F': [255, 255, 204],  # light yellow for beam&player
+    'B': [255, 255, 0],  # yellow for beam
+    'C': [100, 30, 30],  # brown for collect apple
 })
 GATHERING_COLOR.update({
     '_': [47, 79, 79],  # DarkSlateGray
@@ -127,19 +117,17 @@ GATHERING_COLOR.update({
     'o': [255, 200, 130],  # Light Orange
     'p': [0, 255, 0],  # Apple
     'f': [255, 255, 204],
-    'b': [255, 255, 0], # yellow beam
-    'c': [100, 30, 30], # apple and player
+    'b': [255, 255, 0],  # yellow beam
+    'c': [100, 30, 30],  # apple and player
 })
-
 
 ## USER CONFIGURATIONS
 GATHERING_FPS = 5
-GATHERING_RESOLUTION = [1200, 700]  # [width, hight]
-GATHERING_MAP_SIZE = (30,20)
+GATHERING_RESOLUTION = [1120, 640]  # [width, hight]
+GATHERING_MAP_SIZE = (35, 20)
 GATHERING_PLAYER_BLOOD = 2
 GATHERING_TAGGED_TIME = 2
 GATHERING_APPLE_NUMBER = 3
-GATHERING_APPLE_RESPAWN = 3
 ## 30*20 map
 GATHERING_MAP = [
     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
