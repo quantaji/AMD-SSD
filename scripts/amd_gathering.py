@@ -18,7 +18,7 @@ if module_path not in sys.path:
 
 from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
-from core.environments.wolfpack import wolfpack_env_creator
+from core.environments.gathering import gathring_env_creator
 
 
 class SimpleMLPModelV2(TorchModelV2, nn.Module):
@@ -56,22 +56,19 @@ if __name__ == "__main__":
 
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
-    env_name = 'wolfpack'
+    env_name = 'gathering'
 
     register_env(
         env_name,
-        lambda config: P2M(wolfpack_env_creator(config)),
+        lambda config: P2M(gathring_env_creator(config)),
     )
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
     config = AMDConfig().environment(
         env=env_name,
         env_config={
-            'r_lone': 1.0,
-            'r_team': 5.0,
-            'r_prey': 0.001,
-            'coop_radius': 4,
             'max_cycles': 1024,
+            'apple_respawn': 3,
         },
         clip_actions=True,
     ).rollouts(
@@ -85,9 +82,9 @@ if __name__ == "__main__":
         train_batch_size=1024,
         lr=2e-5,
         gamma=0.99,
-        coop_agent_list=['wolf_1', 'wolf_2'],
+        coop_agent_list=['blue_p', 'red_p'],
         # planner_reward_max=0.1,
-        planner_reward_max=0.0,
+        planner_reward_max=1.0,
         force_zero_sum=False,
         param_assumption='neural',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
@@ -97,7 +94,6 @@ if __name__ == "__main__":
 
     tune.run(
         AMD,
-        # name="amd_with_r_planner_max=0.1",
         name="actor_critic_with_no_planner",
         stop={"timesteps_total": 5000000},
         keep_checkpoints_num=3,

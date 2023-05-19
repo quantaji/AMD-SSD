@@ -1,50 +1,36 @@
 from builtins import breakpoint
 from dataclasses import replace
 from importlib.metadata import metadata
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    TypeVar,
-)
-from pettingzoo.utils.env import (
-    ObsType,
-    ActionType,
-    AgentID,
-    ObsDict,
-    ActionDict,
-)
+from typing import (Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar)
 
-import pygame
 import numpy as np
+import pygame
 from gymnasium import spaces
 from gymnasium.utils import seeding
-from pettingzoo.utils.env import ParallelEnv
+from pettingzoo.utils.env import (ActionDict, ActionType, AgentID, ObsDict, ObsType, ParallelEnv)
+
+from core.environments.utils import (ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array)
 
 from ..base.gridworld import GridWorldBase
 from .agent import GatheringAgent, GatheringApple
 from .constants import (
+    GATHERING_ACTIONS,
     GATHERING_AGENT_MAP,
     GATHERING_AGENT_VIEW_TUNE,
-    GATHERING_MAP,
-    GATHERING_COLOR,
-    GATHERING_RESOLUTION,
-    GATHERING_ORIENTATION_TUNE,
-    GATHERING_NO_ENTRY_STATE,
-    GATHERING_ORIENTATION_CHANGE,
-    GATHERING_ORIENTATION_BOUNDING_BOX,
-    GATHERING_APPLE_NUMBER,
     GATHERING_APPLE_NO_ENTRY_STATE,
+    GATHERING_APPLE_NUMBER,
     GATHERING_BEAM_PLAYER_STATE,
+    GATHERING_COLOR,
+    GATHERING_MAP,
+    GATHERING_MAP_SIZE,
+    GATHERING_NO_ENTRY_STATE,
     GATHERING_OBSERVATION_SHAPE,
-    GATHERING_ACTIONS,
+    GATHERING_ORIENTATION_BOUNDING_BOX,
+    GATHERING_ORIENTATION_CHANGE,
+    GATHERING_ORIENTATION_TUNE,
+    GATHERING_RESOLUTION,
 )
 
-from core.environments.utils import ascii_list_to_array, ascii_array_to_rgb_array, ascii_dict_to_color_array
 
 class Gathering(GridWorldBase):
 
@@ -72,24 +58,24 @@ class Gathering(GridWorldBase):
             posi = apple.position
             base_world[posi[0], posi[1]] = GATHERING_AGENT_MAP['apple']
         return base_world
-        
 
     def __init__(
         self,
-        randomizer: np.random.Generator, 
+        randomizer: np.random.Generator,
         max_cycles: int = 1024,
         apple_respawn: int = 1,
     ):
         self.agent_dict = {}
         self.apple_dict = {}
+
         for agent in self.agents:
             self.agent_dict[agent] = GatheringAgent(agent)
-        
+
         ## in config dict: time for apple respawn
         self.apple_respawn = apple_respawn
         for i in range(self.apple_number):
             ## All apple has the name prefix 'apple_'
-            apple_id = 'apple_'+str(i)
+            apple_id = 'apple_' + str(i)
             self.apple_dict[apple_id] = GatheringApple(apple_id, self.apple_respawn)
 
         self.max_cycles = max_cycles
@@ -117,7 +103,7 @@ class Gathering(GridWorldBase):
         pos_choice_a = self.randomizer.choice(len(y_a), size=(self.apple_number, ), replace=True)
         # ori_choice_a = self.randomizer.choice(4, size=(self.apple_number, ), replace=True)
         for i in range(self.apple_number):
-            apple_id = 'apple_'+str(i)
+            apple_id = 'apple_' + str(i)
             self.apple_dict[apple_id].position = [x_a[pos_choice_a[i]], y_a[pos_choice_a[i]]]
             #self.apple_dict[apple_id].orientation = ori_choice_a[i]
             ## reset blood, tagged time, beam etc.
@@ -126,7 +112,7 @@ class Gathering(GridWorldBase):
         ## reset counters
         self.reinit()
 
-        self.num_frames = 0 
+        self.num_frames = 0
 
         # update drawing
         self.draw()
@@ -158,7 +144,6 @@ class Gathering(GridWorldBase):
             ori_posi = agent.orientation_position
             if (0 <= ori_posi[0]) and (ori_posi[0] < self.world_shape[0]) and (0 <= ori_posi[1]) and (ori_posi[1] < self.world_shape[1]) and grid_world[ori_posi[0], ori_posi[1]] in GATHERING_ORIENTATION_TUNE.keys():
                 grid_world[ori_posi[0], ori_posi[1]] = GATHERING_ORIENTATION_TUNE[grid_world[ori_posi[0], ori_posi[1]]]
-        
         '''
         for apple_id in self.apple_dict.keys():
             apple = self.apple_dict[apple_id]
@@ -189,15 +174,15 @@ class Gathering(GridWorldBase):
                         grid_world[next_pos[0], next_pos[1]] = 'B'
                     elif grid_world[next_pos[0], next_pos[1]] == 'P':
                         grid_world[next_pos[0], next_pos[1]] = 'W'
-                    else: #one question: for C, now set it to not collected
+                    else:  #one question: for C, now set it to not collected
                         grid_world[next_pos[0], next_pos[1]] = 'F'
-                    next_pos = next_pos+ GATHERING_ORIENTATION_CHANGE[orii]
+                    next_pos = next_pos + GATHERING_ORIENTATION_CHANGE[orii]
                     not_stop = (grid_world[next_pos[0], next_pos[1]] not in GATHERING_NO_ENTRY_STATE)
 
         return grid_world
 
     def observe(self, agent: AgentID) -> spaces.Space:
-        # load base world 
+        # load base world
         grid_world = self.base_world.copy()
         grid_world = self._baseworld_with_apple(grid_world)
         ## TODO: add other apples? Or they are on the world
@@ -235,12 +220,13 @@ class Gathering(GridWorldBase):
         return ascii_array_to_rgb_array(observation, self.ascii_color_array)
 
     def step(self, actions: ActionDict):
+        self.reinit()  # reset all rewards etc
+
         # All agents act
         ## Get newest gridworld with beam area
         grid_world = self.grid_world()
         for agent_key, agent in self.agent_dict.items():
-            agent.act(action=actions[agent_key],
-            grid_world=grid_world)
+            agent.act(action=actions[agent_key], grid_world=grid_world)
 
         ## Clear & respawn apple
         for apple_id, apple in self.apple_dict.items():
@@ -249,28 +235,29 @@ class Gathering(GridWorldBase):
                 apple.get_collected(self.num_frames)
                 ## can log collected time
                 ## Here record the reward
-      
+
                 apple.eaten_time += 1
             if apple.is_eaten:
                 x_a, y_a = np.where(~np.isin(grid_world, GATHERING_APPLE_NO_ENTRY_STATE))
                 ## not use randomizer, to ensure not always respawn in the same place
                 pos_choice_a = np.random.choice(len(y_a), size=(1, ), replace=True)
-                
+
                 apple.respawn(position=[x_a[pos_choice_a[0]], y_a[pos_choice_a[0]]], current_time_frame=self.num_frames)
-        
+
         self.num_frames += 1
 
         # test termination and calc reward
         for agent_key, agent in self.agent_dict.items():
             posi = agent.position
-            if grid_world[posi[0],posi[1]] == 'C':
+            if grid_world[posi[0], posi[1]] == 'C':
                 self.rewards[agent_key] = agent.apple_eaten
         if self.num_frames >= self.max_cycles:
             self.truncations = dict(zip(self.agents, [True] * len(self.agents)))
-        
+
         if self.render_on:
             pygame.event.pump()
         self.draw()
+
 
 class GatheringEnv(ParallelEnv):
     metadata = {
@@ -278,15 +265,12 @@ class GatheringEnv(ParallelEnv):
         "render_modes": ["human", "rgb_array", "ansi"],
     }
 
-    observation_shape = (GATHERING_OBSERVATION_SHAPE[0], GATHERING_OBSERVATION_SHAPE[1], 2)
+    observation_shape = (GATHERING_OBSERVATION_SHAPE[0], GATHERING_OBSERVATION_SHAPE[1], 3)
+    state_shape = (GATHERING_MAP_SIZE[0], GATHERING_MAP_SIZE[1], 3)
 
-    def __init__(self, max_cycles=1240, apple_respawn=2, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
 
         self._kwargs = kwargs
-        
-        ## Env parameters
-        self.max_cycles = max_cycles
-        self.apple_respawn = apple_respawn
 
         self.env: Gathering
 
@@ -298,17 +282,20 @@ class GatheringEnv(ParallelEnv):
 
         # spaces
         self.observation_spaces = {}
-        for agent_key in self.agents:
+        for agent_key in self.possible_agents:
             self.observation_spaces[agent_key] = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
+
         self.action_spaces = {}
-        for agent_key in self.agents:
+        for agent_key in self.possible_agents:
             self.action_spaces[agent_key] = spaces.Discrete(len(GATHERING_ACTIONS))
+
+        self.state_space = spaces.Box(low=0, high=255, shape=self.state_shape, dtype=np.uint8)
 
         self.convert_to_rllib_env: bool = False
 
     def seed(self, seed=None):
         self.randomizer, seed = seeding.np_random(seed)
-        self.env = Gathering(self.randomizer, self.max_cycles, self.apple_respawn, **self._kwargs)
+        self.env = Gathering(self.randomizer, **self._kwargs)
 
     def reset(
         self,
@@ -366,7 +353,13 @@ def gathring_env_creator(config: Dict[str, Any] = {
 }) -> GatheringEnv:
     env = GatheringEnv(
         max_cycles=config['max_cycles'],
-        apple_respawn=config['apple_respawn']
+        apple_respawn=config['apple_respawn'],
     )
     env.convert_to_rllib_env = True
     return env
+
+
+gathering_env_default_config: Dict[str, Any] = {
+    'max_cycles': 1240,
+    'apple_respawn': 3,
+}
