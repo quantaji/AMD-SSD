@@ -2,22 +2,16 @@
 
 #SBATCH --job-name="forl-proj"
 #SBATCH --output=%j.out
-#SBATCH --time=10:00
-
-### This script works for any number of nodes, Ray will find and manage all resources
-#SBATCH --nodes=1
+#SBATCH --time=15:00
 
 ### Give all resources to a single Ray task, ray can manage the resources internally
-#SBATCH --ntasks=6
-#SBATCH --cpus-per-task=1
-#SBATCH --mem-per-cpu=8G
-#SBATCH --gpus=rtx_2080_ti:1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem-per-cpu=3G
+#SBATCH --gpus=gtx_1080_ti:1
 
 ### storage
 #SBATCH --tmp=4G
-
-# testing, check the environment variable
-echo $SLURM_NTASKS
 
 # Load modules or your own conda environment here
 module load gcc/8.2.0 python_gpu/3.10.4 cuda/11.8.0 git-lfs/2.3.0 git/2.31.1 eth_proxy cudnn/8.4.0.27
@@ -34,11 +28,7 @@ fi
 redis_password=$(uuidgen)
 export redis_password
 
-nodes=$(scontrol show hostnames $SLURM_JOB_NODELIST) # Getting the node names
-nodes_array=($nodes)
-
-head_node=${nodes_array[0]}
-head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
+head_node_ip=$(srun --exact --ntasks=1 hostname --ip-address)
 
 # if we detect a space character in the head node IP, we'll
 # convert it to an ipv4 address. This step is optional.
@@ -59,21 +49,10 @@ ip_head=$head_node_ip:$port
 export ip_head
 echo "IP Head: $ip_head"
 
-echo "STARTING HEAD at $head_node"
-srun --nodes=1 --ntasks=1 -w $head_node ray start --head --node-ip-address=$head_node_ip --port=$port --redis-password=$redis_password --temp-dir $ray_temp_dir --block --disable-usage-stats &
+echo "STARTING HEAD"
+srun ray start --head --node-ip-address=$head_node_ip --port=$port --redis-password=$redis_password --temp-dir $ray_temp_dir --block --disable-usage-stats &
 # __doc_head_ray_end__
-
-# __doc_worker_ray_start__
-# optional, though may be useful in certain versions of Ray < 1.0.
-sleep 10
-worker_num=$(($SLURM_NTASKS - 2)) # number of nodes other than the head node
-for ((i = 1; i <= $worker_num; i++)); do
-    echo "STARTING WORKER $i at $head_node"
-    srun --nodes=1 --ntasks=1 -w $head_node ray start --address $ip_head --redis-password=$redis_password --temp-dir $ray_temp_dir --block --disable-usage-stats &
-    sleep 5
-done
-# __doc_worker_ray_end__
 
 # __doc_script_start__
 echo "STARTING ALGORITHM with num of works of $worker_num ."
-python sbatch_scripts/amd_wolfpack.py --num_workers ${worker_num}
+python sbatch_scripts/amd_wolfpack.py

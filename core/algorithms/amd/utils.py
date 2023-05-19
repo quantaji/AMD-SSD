@@ -99,16 +99,16 @@ def get_availability_mask(cp_t: np.ndarray, cp_eps_id: np.ndarray, ag_t: np.ndar
 
 
 def discounted_cumsum_factor_matrix(
-    eps_id: np.ndarray,
-    t: np.ndarray,
+    eps_id: np.ndarray | torch.Tensor,
+    t: np.ndarray | torch.Tensor,
     gamma: float = 1.0,
-) -> np.ndarray:
+) -> np.ndarray | torch.Tensor:
     """
     Given a batch of length T, return a TxT matrix of following element
     M_ij = gamma^{t_j - t_i} if t_j >= t_i and they are of same episode, else 0
     """
     t_diff = t.reshape(1, -1) - 0 * t.reshape(-1, 1)
-    return np.power(gamma, t_diff) * (t_diff >= 0) * (eps_id.reshape(-1, 1) == eps_id.reshape(1, -1))
+    return (gamma ** t_diff) * (t_diff >= 0) * (eps_id.reshape(-1, 1) == eps_id.reshape(1, -1))
 
 
 def action_to_reward(

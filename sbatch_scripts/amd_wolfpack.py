@@ -72,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=0,
+        default=4,
         required=False,
         help="The number of remote workers used by this algorithm. Default 0, means using local worker.")
     args, _ = parser.parse_known_args()
@@ -90,7 +90,8 @@ if __name__ == "__main__":
     os.environ['RLLIB_NUM_GPUS'] = '1'
     env_name = 'wolfpack'
 
-    print(args.num_workers)
+    print('number of workers: ', args.num_workers)
+    print('number of gpus: ', int(os.environ.get("RLLIB_NUM_GPUS", "0")))
 
     register_env(
         env_name,
@@ -119,7 +120,7 @@ if __name__ == "__main__":
         lr=2e-5,
         gamma=0.99,
         coop_agent_list=['wolf_1', 'wolf_2'],
-        planner_reward_max=0.0,
+        planner_reward_max=0.4,
         force_zero_sum=False,
         param_assumption='neural',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
