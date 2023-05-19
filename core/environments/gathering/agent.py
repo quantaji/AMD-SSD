@@ -3,7 +3,7 @@ from pettingzoo.utils.env import (
     ActionType,
     AgentID,
 )
-from core.environments.gathering.constants import GATHERING_NO_ENTRY_STATE, GATHERING_MAP_SIZE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME, GATHERING_APPLE_RESPAWN
+from core.environments.gathering.constants import GATHERING_NO_ENTRY_STATE, GATHERING_MAP_SIZE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME
 from core.environments.base.constants import *
 
 import numpy as np
@@ -85,12 +85,16 @@ class GatheringAgent(GridWorldAgentBase):
         else:
             self.move(action=action, grid_world=grid_world)
 
-class GatheringApple(GridWorldAgentBase):
+class GatheringApple():
     no_entry_grid_state_list = GATHERING_NO_ENTRY_STATE
     map_x, map_y = GATHERING_MAP_SIZE
 
-    def __init__(self, agent_id: AgentID) -> None:
-        super().__init__(agent_id)
+    def __init__(self, agent_id: AgentID, apple_respawn) -> None:
+        #super().__init__(agent_id)
+        self.agent_id = agent_id
+        self.position = None
+        #self.orientation = None
+        self.apple_respawn = apple_respawn
         #self.orientation(0)
         #self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
         self.is_eaten = False
@@ -115,4 +119,4 @@ class GatheringApple(GridWorldAgentBase):
     def get_collected(self, time):
         self.is_eaten = True
         self.collected_time = time
-        self.respawn_time_frame = time + GATHERING_APPLE_RESPAWN
+        self.respawn_time_frame = time + self.apple_respawn

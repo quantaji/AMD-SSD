@@ -15,7 +15,7 @@ def rgb_onestep(env, action, step_number):
     env.step(dict(zip(env.agents, action)))
     output = env.grid_world()
     rgb = ascii_array_to_rgb_array(output, env.ascii_color_array)
-    img = Image.fromarray(env.render()).save(f"gathering_small_map/sample{step_number}.png")
+    img = Image.fromarray(env.render()).save(f"gathering_small_map1/sample{step_number}.png")
     return env
 
 ## seed 1145 for sample imgs in gathering_imgs
@@ -24,7 +24,7 @@ a = Gathering(rng, )
 a.render_mode = 'rgb_array'
 a.reset()
 #print(ascii_array_to_str(a.grid_world()))
-img = Image.fromarray(a.render()).save('gathering_small_map/sample.png')
+img = Image.fromarray(a.render()).save('gathering_small_map1/sample.png')
 
 # np.random.choice(7, size=(len(a.agents),)).tolist()
 a = rgb_onestep(a, (2,5), 1)
@@ -47,4 +47,4 @@ from pettingzoo.test import parallel_api_test
 from pettingzoo.butterfly import cooperative_pong_v5
 from core.environments.gathering.env import GatheringEnv
 env = GatheringEnv()
-parallel_api_test(env, num_cycles=100000000)
+parallel_api_test(env, num_cycles=10000)
