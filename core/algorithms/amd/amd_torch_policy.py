@@ -4,23 +4,23 @@ PyTorch policy class used for AMD.
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from ray.rllib.evaluation import Episode
 import torch
 import torch.nn as nn
 from gymnasium import spaces
 from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
+from ray.rllib.evaluation import Episode
 from ray.rllib.evaluation.episode import Episode
-from ray.rllib.evaluation.postprocessing import (Postprocessing, compute_gae_for_sample_batch)
+from ray.rllib.evaluation.postprocessing import Postprocessing, compute_gae_for_sample_batch
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch import torch_modelv2
 from ray.rllib.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
+from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.typing import TensorStructType, TensorType
 from torch.func import functional_call, jacrev
-from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 
 from .constants import PreLearningProcessing
 from .utils import action_to_reward, discounted_cumsum_factor_matrix

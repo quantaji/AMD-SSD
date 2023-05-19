@@ -1,9 +1,9 @@
 from typing import Dict, List, Tuple
+
 import numpy as np
 from gymnasium import spaces
 from gymnasium.vector.utils import create_empty_array
-from pettingzoo.utils.env import ParallelEnv
-from pettingzoo.utils.env import AgentID, ObsDict, ActionDict
+from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
 
 from ..constants import CENTRAL_PLANNER
 

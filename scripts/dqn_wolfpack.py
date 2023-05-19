@@ -18,9 +18,8 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 
 from core.algorithms.amd.amd import AMD, AMDConfig
-from core.algorithms.amd.wrappers import \
-    MultiAgentEnvFromPettingZooParallel as P2M
-from core.environments.wolfpack.env import wolfpack_env_creator
+from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
+from core.environments.wolfpack import wolfpack_env_creator
 
 
 class SimpleMLPModelV2(TorchModelV2, nn.Module):

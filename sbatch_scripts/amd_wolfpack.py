@@ -1,6 +1,6 @@
+import argparse
 import os
 import sys
-import argparse
 
 import gymnasium as gym
 import numpy as np
@@ -54,29 +54,13 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ray rllib training.")
-    parser.add_argument(
-        "--cuda",
-        action="store_true",
-        default=False,
-        help="Enables GPU training")
-    parser.add_argument(
-        "--ray-address",
-        help="Address of Ray cluster for seamless distributed execution.")
-    parser.add_argument(
-        "--server-address",
-        type=str,
-        default=None,
-        required=False,
-        help="The address of server to connect to if using "
-        "Ray Client.")
-    parser.add_argument(
-        "--num_workers",
-        type=int,
-        default=4,
-        required=False,
-        help="The number of remote workers used by this algorithm. Default 0, means using local worker.")
+    parser.add_argument("--cuda", action="store_true", default=False, help="Enables GPU training")
+    parser.add_argument("--ray-address", help="Address of Ray cluster for seamless distributed execution.")
+    parser.add_argument("--server-address", type=str, default=None, required=False, help="The address of server to connect to if using "
+                        "Ray Client.")
+    parser.add_argument("--num_workers", type=int, default=4, required=False, help="The number of remote workers used by this algorithm. Default 0, means using local worker.")
     args, _ = parser.parse_known_args()
-    
+
     tmp_dir = os.getenv('ray_temp_dir') or os.path.join(str(os.getenv('SCRATCH')), '.tmp_ray')
 
     if args.server_address:
@@ -109,9 +93,7 @@ if __name__ == "__main__":
             'max_cycles': 1024,
         },
         clip_actions=True,
-    ).rollouts(
-        num_rollout_workers=args.num_workers,
-    ).training(
+    ).rollouts(num_rollout_workers=args.num_workers, ).training(
         model={
             "custom_model": "SimpleMLPModelV2",
             "custom_model_config": {},
@@ -134,6 +116,6 @@ if __name__ == "__main__":
         stop={"timesteps_total": 5000000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
-        local_dir= os.path.join(str(os.getenv('SCRATCH')), 'ray_results', env_name),
+        local_dir=os.path.join(str(os.getenv('SCRATCH')), 'ray_results', env_name),
         config=config.to_dict(),
     )

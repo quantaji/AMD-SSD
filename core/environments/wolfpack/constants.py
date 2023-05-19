@@ -6,7 +6,8 @@ WOLFPACK_STATE.update({
     'V': 'worf_2',
     'W': 'two wolves at same position',
     'S': 'Self',
-    'O': 'the other wolf',
+    'O': 'the other wolf',  # or team mates
+    'X': 'opponent',  # for wolf, opponent is prey, for prey, opponent is wolf
     'P': 'prey',  # pre and wolf will not be at same position, the game will end before that
 })
 WOLFPACK_AGENT_MAP = {
@@ -18,16 +19,16 @@ WOLFPACK_AGENT_VIEW_TUNE = {
     'wolf_1': {
         'U': 'S',
         'V': 'O',
-        'P': 'P',
+        'P': 'X',
     },
     'wolf_2': {
         'U': 'O',
         'V': 'S',
-        'P': 'P',
+        'P': 'X',
     },
     'prey': {
-        'U': 'O',
-        'V': 'O',
+        'U': 'X',
+        'V': 'X',
         'P': 'S',
     },
 }
@@ -41,6 +42,7 @@ WOLFPACK_STATE.update({
     's': "self in orientation",
     'o': "the other wolf in orientation",
     'p': "prey in other's orientation",
+    'x': "opponents in other's orientation",
 })
 WOLFPACK_ORIENTATION_TUNE = {
     ' ': '_',
@@ -52,6 +54,7 @@ WOLFPACK_ORIENTATION_TUNE = {
     'S': 's',
     'O': 'o',
     'P': 'p',
+    'X': 'x',
 }
 WOLFPACK_NO_ENTRY_STATE = [
     '@',
@@ -73,22 +76,24 @@ WOLFPACK_ACTIONS = BASE_ACTIONS.copy()
 
 WOLFPACK_COLOR = BASE_GRID_COLOR.copy()
 WOLFPACK_COLOR.update({
-    'U': [255, 20, 147],  # DeepPink, predator wolf 1
-    'V': [238, 130, 238],  # Violet, predator wolf 2
-    'W': [255, 0, 0],  # same
-    'O': [255, 140, 0],  # Deep orange, for the other wolf
-    'S': [0, 128, 0],  # Green for self
-    'P': [0, 0, 255],  # Blue, for prey
+    'U': [205, 92, 92],  # wolf 1, indian red
+    'V': [255, 140, 0],  # wolf 2, dark orange
+    'W': [0, 128, 0],  # two wolf, green
+    'O': [173, 216, 230],  # teammates, light blue
+    'S': [0, 0, 255],  # self, blue
+    'P': [0, 0, 255],  # prey, blue
+    'X': [255, 0, 0],  # opponent, red
 })
 WOLFPACK_COLOR.update({
     '_': [47, 79, 79],  # DarkSlateGray
     '&': [169, 169, 169],  # Dark grey
-    'u': [255, 105, 180],  # HotPink
-    'v': [221, 160, 221],  # Plum
-    'w': [205, 92, 92],  # IndianRed
-    's': [60, 179, 113],  # MediumSeaGreen
-    'o': [255, 165, 0],  # Orange
+    'u': [220, 20, 60],  # Crimson
+    'v': [255, 165, 0],  # Orange
+    'w': [50, 205, 50],  # Limegreen
+    's': [65, 105, 225],  # Royal blue
+    'o': [176, 196, 222],  # light steel blue
     'p': [65, 105, 225],  # Royal blue
+    'x': [139, 0, 0],  # dark red
 })
 
 WOLFPACK_MAP = [

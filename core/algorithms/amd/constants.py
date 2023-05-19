@@ -11,4 +11,4 @@ class PreLearningProcessing:
     R_PLANNER_CUM = 'cumulative_reward_by_planner'
     TOTAL_ADVANTAGES = 'total_advantages'  # sum of all cooperative agents' advantage, used for computing awareness
     AVAILABILITY = 'availability'  # used for central planner to get only the agent's reward when it is not terminated
-    DISCOUNTED_FACTOR_MATRIX = 'discounted_factor_matrix' # used for processing a batch, a btach may have multiple episodes, this matrix is TxT indicating which time appear in previous timesteps for calculation of discounted cumsum
+    DISCOUNTED_FACTOR_MATRIX = 'discounted_factor_matrix'  # used for processing a batch, a btach may have multiple episodes, this matrix is TxT indicating which time appear in previous timesteps for calculation of discounted cumsum

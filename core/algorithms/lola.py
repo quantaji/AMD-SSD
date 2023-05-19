@@ -13,10 +13,8 @@ from ray.rllib.algorithms.pg import pg
 from ray.rllib.algorithms.ppo import ppo
 from ray.rllib.evaluation.sampler import SamplerInput
 from ray.rllib.examples.env.two_step_game import TwoStepGame
-from ray.rllib.examples.models.centralized_critic_models import (
-    CentralizedCriticModel, TorchCentralizedCriticModel)
-from ray.rllib.models.torch import torch_modelv2
-from ray.rllib.policy.sample_batch import (concat_samples,
-                                           concat_samples_into_ma_batch)
-from ray.tune.registry import get_trainable_cls
+from ray.rllib.examples.models.centralized_critic_models import (CentralizedCriticModel, TorchCentralizedCriticModel)
 from ray.rllib.models import ModelCatalog
+from ray.rllib.models.torch import torch_modelv2
+from ray.rllib.policy.sample_batch import (concat_samples, concat_samples_into_ma_batch)
+from ray.tune.registry import get_trainable_cls

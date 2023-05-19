@@ -17,7 +17,7 @@ module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
     sys.path.append(module_path)
 
-from core.environments.wolfpack.env import wolfpack_env_creator
+from core.environments.wolfpack import wolfpack_env_creator
 
 
 class SimpleMLPModelV2(TorchModelV2, nn.Module):

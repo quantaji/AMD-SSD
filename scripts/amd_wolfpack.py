@@ -86,8 +86,7 @@ if __name__ == "__main__":
         lr=2e-5,
         gamma=0.99,
         coop_agent_list=['wolf_1', 'wolf_2'],
-        # planner_reward_max=0.1,
-        planner_reward_max=0.0,
+        planner_reward_max=1.0,
         force_zero_sum=False,
         param_assumption='neural',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(

@@ -83,7 +83,6 @@ if __name__ == "__main__":
         lr=2e-5,
         gamma=0.99,
         coop_agent_list=['blue_p', 'red_p'],
-        # planner_reward_max=0.1,
         planner_reward_max=1.0,
         force_zero_sum=False,
         param_assumption='neural',

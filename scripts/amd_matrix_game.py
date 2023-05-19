@@ -18,7 +18,6 @@ if module_path not in sys.path:
 
 from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
-# from core.environments.wolfpack.env import wolfpack_env_creator
 from core.environments.simple_games.matrix_game import matrix_game_env_creator
 
 

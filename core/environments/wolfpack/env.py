@@ -8,11 +8,7 @@ from gymnasium.utils import seeding
 from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
 
 from ..base.gridworld import GridWorldBase
-from ..utils import (
-    ascii_array_to_rgb_array,
-    ascii_dict_to_color_array,
-    ascii_list_to_array,
-)
+from ..utils import (ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array)
 from .agent import WolfpackAgent
 from .constants import (
     WOLFPACK_ACTIONS,

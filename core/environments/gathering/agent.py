@@ -1,12 +1,11 @@
-from ..base.agent import GridWorldAgentBase
-from pettingzoo.utils.env import (
-    ActionType,
-    AgentID,
-)
-from core.environments.gathering.constants import GATHERING_NO_ENTRY_STATE, GATHERING_MAP_SIZE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME
-from core.environments.base.constants import *
-
 import numpy as np
+from pettingzoo.utils.env import ActionType, AgentID
+
+from core.environments.base.constants import *
+from core.environments.gathering.constants import (GATHERING_MAP_SIZE, GATHERING_NO_ENTRY_STATE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME)
+
+from ..base.agent import GridWorldAgentBase
+
 
 class GatheringAgent(GridWorldAgentBase):
 
@@ -22,8 +21,8 @@ class GatheringAgent(GridWorldAgentBase):
         self.num_hit_by_beam = False
         self.tagged_time = 0
         self.apple_eaten = 0
-        self.is_agent = False # Agent=blue, other=red; Is needed?
-        
+        self.is_agent = False  # Agent=blue, other=red; Is needed?
+
     def _reset(self):
         self.using_beam = False
         self.is_tagged = False
@@ -35,8 +34,9 @@ class GatheringAgent(GridWorldAgentBase):
         return self._position, self._orientation
 
     def stand_still(self):
-        self.using_beam=False
-        pass 
+        self.using_beam = False
+        pass
+
     # perhaps no need
     def check_tagged(self):
         if self.is_tagged:
@@ -47,7 +47,7 @@ class GatheringAgent(GridWorldAgentBase):
 
     def use_beam(self):
         self.using_beam = True
-    
+
     def get_hit(self):
         self.num_hit_by_beam += 1
         if self.num_hit_by_beam >= GATHERING_PLAYER_BLOOD:
@@ -55,14 +55,13 @@ class GatheringAgent(GridWorldAgentBase):
             self.using_beam = False
             self.is_tagged = True
             self.tagged_time = GATHERING_TAGGED_TIME
-    
+
     def recover(self):
         if self.tagged_time == 1:
             self.respawn()
             return
         self.tagged_time -= 1
 
-    
     def respawn(self):
         self.is_tagged = False
         self.tagged_time = 0
@@ -84,6 +83,7 @@ class GatheringAgent(GridWorldAgentBase):
             self.apple_eaten += 1
         else:
             self.move(action=action, grid_world=grid_world)
+
 
 class GatheringApple():
     no_entry_grid_state_list = GATHERING_NO_ENTRY_STATE
@@ -115,7 +115,7 @@ class GatheringApple():
         self.is_eaten = False
         self.collected_time = 0.
         self.respawn_time_frame = 0
-    
+
     def get_collected(self, time):
         self.is_eaten = True
         self.collected_time = time

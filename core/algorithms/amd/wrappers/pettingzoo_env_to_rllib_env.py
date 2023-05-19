@@ -1,7 +1,8 @@
 from typing import Optional
+
 from gymnasium import spaces
 from pettingzoo.utils.env import ParallelEnv
-from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
+from ray.rllib.env.multi_agent_env import ENV_STATE, MultiAgentEnv
 
 STATE_SPACE = 'state_space'
 

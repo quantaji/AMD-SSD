@@ -108,7 +108,7 @@ def discounted_cumsum_factor_matrix(
     M_ij = gamma^{t_j - t_i} if t_j >= t_i and they are of same episode, else 0
     """
     t_diff = t.reshape(1, -1) - 0 * t.reshape(-1, 1)
-    return (gamma ** t_diff) * (t_diff >= 0) * (eps_id.reshape(-1, 1) == eps_id.reshape(1, -1))
+    return (gamma**t_diff) * (t_diff >= 0) * (eps_id.reshape(-1, 1) == eps_id.reshape(1, -1))
 
 
 def action_to_reward(

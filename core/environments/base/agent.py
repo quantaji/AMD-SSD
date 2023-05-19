@@ -13,11 +13,7 @@ from typing import List, Tuple
 import numpy as np
 from pettingzoo.utils.env import ActionType, AgentID
 
-from .constants import (
-    ACTION_ORIENTATION_CHANGE,
-    ACTION_POSITION_CHANGE,
-    ORIENTATION_CHANGE,
-)
+from .constants import (ACTION_ORIENTATION_CHANGE, ACTION_POSITION_CHANGE, ORIENTATION_CHANGE)
 
 
 class GridWorldAgentBase:
@@ -85,7 +81,7 @@ class GridWorldAgentBase:
         new_pos = self.position.copy()
         if action in ACTION_POSITION_CHANGE.keys():
             #new_pos += ACTION_POSITION_CHANGE[action]
-            new_pos += ACTION_POSITION_CHANGE[(action+self.orientation)%4]
+            new_pos += ACTION_POSITION_CHANGE[(action + self.orientation) % 4]
         return new_pos
 
     def _new_orientation(self, action: ActionType) -> int:
