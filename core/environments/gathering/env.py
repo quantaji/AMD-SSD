@@ -207,7 +207,7 @@ class Gathering(GridWorldBase):
             if grid_world[posi[0], posi[1]] == ' ':
                 grid_world[posi[0], posi[1]] = GATHERING_AGENT_VIEW_TUNE[agent][GATHERING_AGENT_MAP[other_agent_key]]
             elif grid_world[posi[0], posi[1]] in ['P']:
-                grid_world[posi[0], posi[1]] = GATHERING_AGENT_VIEW_TUNE[agent]['apple']
+                grid_world[posi[0], posi[1]] = GATHERING_AGENT_VIEW_TUNE[agent]['P']
             else:
                 grid_world[posi[0], posi[1]] = 'W'
 
