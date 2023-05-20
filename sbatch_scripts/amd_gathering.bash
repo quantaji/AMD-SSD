@@ -2,7 +2,7 @@
 
 #SBATCH --job-name="forl-proj"
 #SBATCH --output=%j.out
-#SBATCH --time=8:15:00
+#SBATCH --time=5:15:00
 
 ### Give all resources to a single Ray task, ray can manage the resources internally
 #SBATCH --ntasks=1
@@ -55,4 +55,4 @@ srun ray start --head --node-ip-address=$head_node_ip --port=$port --redis-passw
 
 # __doc_script_start__
 echo "STARTING ALGORITHM with num of works of $worker_num ."
-python sbatch_scripts/amd_wolfpack.py
+python sbatch_scripts/amd_gathering.py
