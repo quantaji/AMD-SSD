@@ -1,6 +1,7 @@
 CENTRAL_PLANNER: str = 'central_planner'
 STATE_SPACE = 'state_space'
 TANH_DETERMINISTIC_DISTRIBUTION = 'tanh_torch_deterministic'
+DETERMINISTIC_DISTRIBUTION = 'torch_deterministic'
 
 
 class PreLearningProcessing:

@@ -13,6 +13,7 @@ from ray.rllib.evaluation.postprocessing import Postprocessing
 from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
 from ray.rllib.execution.train_ops import (multi_gpu_train_one_step, train_one_step)
 from ray.rllib.models import ModelCatalog
+from ray.rllib.models.torch.torch_action_dist import TorchDeterministic
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
@@ -22,7 +23,7 @@ from ray.rllib.utils.typing import (EnvCreator, EnvType, MultiAgentPolicyConfigD
 
 from .action_distribution import TanhTorchDeterministic
 from .callback import AMDDefualtCallback
-from .constants import (CENTRAL_PLANNER, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
+from .constants import (CENTRAL_PLANNER, DETERMINISTIC_DISTRIBUTION, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
 from .utils import (action_to_reward, discounted_cumsum_factor_matrix, get_availability_mask, get_env_example)
 from .wrappers import MultiAgentEnvWithCentralPlanner
 
@@ -53,6 +54,7 @@ class AMDConfig(A3CConfig):
         self.sample_async = False
 
         ModelCatalog.register_custom_action_dist(TANH_DETERMINISTIC_DISTRIBUTION, TanhTorchDeterministic)
+        ModelCatalog.register_custom_action_dist(DETERMINISTIC_DISTRIBUTION, TorchDeterministic)
 
     @override(A3CConfig)
     def callbacks(self, callbacks_class) -> "AMDConfig":
@@ -154,7 +156,6 @@ class AMDConfig(A3CConfig):
         # the policies now is a dict that maps to algorithm config object
         policies[CENTRAL_PLANNER].config.model['custom_action_dist'] = TANH_DETERMINISTIC_DISTRIBUTION
 
-        # also we force the central planner to not explore, this will lead to inconsistency of sampled action and real action
         return policies, is_policy_to_train
 
 

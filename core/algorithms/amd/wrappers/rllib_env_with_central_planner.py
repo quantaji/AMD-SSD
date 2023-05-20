@@ -1,6 +1,7 @@
 from copy import deepcopy
 from typing import Optional, Tuple
 
+import numpy as np
 from gymnasium import spaces
 from gymnasium.core import Env
 from gymnasium.spaces import Space
@@ -18,6 +19,11 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
     action_space: Optional[spaces.Dict] = None
     _agent_ids: set[str]
     _individual_agent_ids: set[str]
+
+    env_state_space: Space
+    agent_action_space: Space
+    agent_presence_space: Space
+
     central_planner_observation_space_unflattened: Space
 
     def __init__(self, env: MultiAgentEnv):
@@ -49,12 +55,23 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
         self._agent_ids.add(self.CENTRAL_PLANNER)
 
         # add observation space
+        # central planner's observation space is concatentation of state x actions x agent presents (binary)
         if self.have_state:
-            self.central_planner_observation_space_unflattened = getattr(self.env, STATE_SPACE)
-            self.observation_space[self.CENTRAL_PLANNER] = getattr(self.env, STATE_SPACE)
+            self.env_state_space = getattr(self.env, STATE_SPACE)
         else:
-            self.central_planner_observation_space_unflattened = spaces.Dict(self.observation_space)
-            self.observation_space[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_observation_space_unflattened)
+            self.env_state_space = spaces.Dict(self.env.observation_space)
+
+        self.agent_action_space = self.env.action_space
+
+        agents = self.env.get_agent_ids()
+        self.agent_presence_space = spaces.Dict(dict(zip(agents, [spaces.MultiBinary(1)] * len(agents))))
+
+        self.central_planner_observation_space_unflattened = spaces.Dict({
+            'state': self.env_state_space,
+            'action': self.agent_action_space,
+            'presence': self.agent_presence_space,
+        })
+        self.observation_space[self.CENTRAL_PLANNER] = spaces.flatten_space(self.central_planner_observation_space_unflattened)
 
         # add action space, the reward by planner
         cp_action_space = {}
@@ -68,18 +85,31 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
 
         super().__init__()
 
-    def observe_central_planner(self, obss: MultiAgentDict):
-        if self.have_state:
-            return self.state()
-        else:
-            obs_cp = {}
-            for agent_id in self.env.get_agent_ids():
-                if agent_id in obss.keys():
-                    obs_cp[agent_id] = obss[agent_id]
-                else:
-                    obs_cp[agent_id] = create_empty_array(self.observation_space[agent_id])
+    def observe_central_planner(self, obss: MultiAgentDict, acts: MultiAgentDict = None):
+        state, action, presence = {}, {}, {}
+        for agent_id in self.env.get_agent_ids():
+            if agent_id in obss.keys():
+                state[agent_id] = obss[agent_id]
+            else:
+                state[agent_id] = create_empty_array(self.observation_space[agent_id])  # this might be bugful because shape will be different, but this will be wiped out when flattened
 
-            return spaces.flatten(self.central_planner_observation_space_unflattened, obs_cp)
+            if acts and agent_id in acts.keys():
+                action[agent_id] = acts[agent_id]
+                presence[agent_id] = np.array([1], dtype=np.int8)
+            else:
+                action[agent_id] = create_empty_array(self.agent_action_space[agent_id])
+                presence[agent_id] = np.array([0], dtype=np.int8)
+
+        if self.have_state:
+            state = self.state()
+
+        cp_obs_uf = {
+            'state': state,
+            'action': action,
+            'presence': presence,
+        }
+
+        return spaces.flatten(self.central_planner_observation_space_unflattened, cp_obs_uf)
 
     def reset(
         self,
@@ -104,7 +134,7 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
 
         rews[self.CENTRAL_PLANNER] = 0.0
 
-        obss[self.CENTRAL_PLANNER] = self.observe_central_planner(obss)
+        obss[self.CENTRAL_PLANNER] = self.observe_central_planner(obss=obss, acts=action_dict)
 
         return obss, rews, terminateds, truncateds, infos
 
