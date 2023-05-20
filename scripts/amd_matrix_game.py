@@ -84,7 +84,7 @@ if __name__ == "__main__":
         gamma=0.99,
         planner_reward_max=3,
         force_zero_sum=False,
-        param_assumption='neural',
+        param_assumption='softmax_single_state',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,

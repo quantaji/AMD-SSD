@@ -10,6 +10,7 @@ from ray import tune
 from ray.rllib.algorithms.dqn import DQN, DQNConfig
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
+from ray.rllib.utils.exploration.epsilon_greedy import EpsilonGreedy
 from ray.tune.registry import register_env
 from torch import nn
 
@@ -65,14 +66,7 @@ if __name__ == "__main__":
     )
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
-    config = DQNConfig()
-    # explore_config = config.exploration_config.update({
-    #     "initial_epsilon": 1.0,
-    #     "final_epsilon": 0.01,
-    #     "epsilone_timesteps": 5000,
-    # })
-
-    config = config.multi_agent(
+    config = DQNConfig().multi_agent(
         policies=['predator', 'prey'],
         policy_mapping_fn=(lambda agent_id, *args, **kwargs: {
             'wolf_1': 'predator',
@@ -86,7 +80,7 @@ if __name__ == "__main__":
             'r_team': 5.0,
             'r_prey': 0.0,
             'coop_radius': 4,
-            'max_cycles': 1024,
+            'max_cycles': 1000,
         },
         clip_actions=True,
     ).rollouts(
@@ -97,7 +91,7 @@ if __name__ == "__main__":
             "custom_model": "SimpleMLPModelV2",
             "custom_model_config": {},
         },
-        train_batch_size=1024,
+        train_batch_size=1000,
         lr=2e-5,
         gamma=0.99,
         v_min=0.0,
@@ -107,14 +101,21 @@ if __name__ == "__main__":
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,
     )
-    # .exploration(exploration_config=explore_config)
+    explore_config = {
+        "type": EpsilonGreedy,
+        "initial_epsilon": 1.0,
+        "final_epsilon": 0.1,
+        "epsilon_timesteps": 100000,
+    }
+    config.explore = True,
+    config.exploration_config = explore_config
 
-    # print(config.exploration_config)
+    print(config.exploration_config)
 
     tune.run(
         DQN,
         name='dqn',
-        stop={"timesteps_total": 5000000},
+        stop={"timesteps_total": 1000000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
         local_dir="~/ray_results/" + env_name,

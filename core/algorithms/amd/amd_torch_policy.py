@@ -286,6 +286,15 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
             awareness += (g_logp_s**2).sum(dim=-1) * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1)
 
+        elif self.config['param_assumption'] == 'softmax_single_state':
+            """Agent with softmax parameterization assumption and all states are the same
+            """
+            logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
+            g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
+
+            pg = (g_logp_s * (copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1, 1))).sum(dim=0)
+            awareness += (pg.reshape(1, -1) * g_logp_s).sum(dim=-1).reshape(-1)
+
         else:
             raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
 
