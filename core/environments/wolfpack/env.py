@@ -45,6 +45,7 @@ class Wolfpack(GridWorldBase):
         r_prey: float = 0.1,  # living reward for prey, this is constantly given
         coop_radius: int = 6,
         max_cycles: int = 1024,
+        render_mode: str = None,
     ):
 
         self.agent_dict = {}
@@ -61,6 +62,9 @@ class Wolfpack(GridWorldBase):
         self.randomizer = randomizer
 
         super().__init__()
+
+        assert render_mode in ['humman', 'rgb_array', 'ansi', None]
+        self.render_mode = render_mode
 
     def reset(self):
         # reset seed
