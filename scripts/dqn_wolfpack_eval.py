@@ -114,15 +114,45 @@ if __name__ == "__main__":
         num_cpus_per_worker=3,
     )
 
-    stop = {
-        "training_iteration": 1,  # only "train" 1 iteration
-        "timesteps_total": 0,
-    }
+    algo = config.build().from_checkpoint('/home/quanta/ray_results/wolfpack/dqn/DQN_wolfpack_5e5a5_00000_0_2023-05-21_12-22-20/checkpoint_000010')
 
-    tune.run(
-        DQN,
-        name='dqn_eval',
-        restore='/home/quanta/ray_results/wolfpack/dqn/DQN_wolfpack_b321c_00000_0_2023-05-20_11-14-18/checkpoint_000110',  # checkpoint path
-        local_dir="~/ray_results/" + env_name,
-        config=config.to_dict(),
-    )
+    worker = algo.workers.local_worker()
+    policy_map = worker.policy_map
+    policy_mapping_fn = worker.policy_mapping_fn
+    for policy_id in policy_map.keys():
+        print(policy_id)
+    env = P2M(wolfpack_env_creator({
+        'r_lone': 1.0,
+        'r_team': 5.0,
+        'r_prey': 0.0,
+        'coop_radius': 4,
+        'max_cycles': 1000,
+    }))
+    obs, _ = env.reset()
+    terminated = truncated = False
+
+    timestep = 0
+
+    env.par_env.env.render_mode = 'rgb_array'  # 'human'
+
+    render_result = []
+    render_result.append(env.render())
+
+    while not terminated and not truncated:
+
+        action = {}
+        for agent_id in obs.keys():
+            action[agent_id] = algo.compute_single_action(
+                observation=obs[agent_id],
+                policy_id=policy_mapping_fn(agent_id),
+            )
+        # action = algo.compute_single_action(obs)
+        obs, reward, terminated, truncated, info = env.step(action)
+        terminated = terminated['__all__']
+        truncated = truncated['__all__']
+        timestep += 1
+
+        render_img = env.render()
+        render_result.append(render_img)
+
+    print(np.array(render_result).shape)
