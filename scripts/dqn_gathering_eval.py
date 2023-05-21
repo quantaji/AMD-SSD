@@ -20,9 +20,8 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 
 from core.algorithms.amd.amd import AMD, AMDConfig
-from core.algorithms.amd.wrappers import \
-    MultiAgentEnvFromPettingZooParallel as P2M
-from core.environments.wolfpack import wolfpack_env_creator
+from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
+from core.environments.gathering.env import gathring_env_creator
 
 
 class SimpleMLPModelV2(TorchModelV2, nn.Module):
@@ -60,74 +59,68 @@ if __name__ == "__main__":
 
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
-    env_name = 'wolfpack'
+    env_name = 'gathering'
 
     register_env(
         env_name,
-        lambda config: P2M(wolfpack_env_creator(config)),
+        lambda config: P2M(gathring_env_creator(config)),
     )
     ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
     config = DQNConfig().multi_agent(
-        policies_to_train=[],
-        policies=['predator', 'prey'],
+        policies=['predator'],
         policy_mapping_fn=(lambda agent_id, *args, **kwargs: {
-            'wolf_1': 'predator',
-            'wolf_2': 'predator',
-            'prey': 'prey',
+            'blue_p': 'predator',
+            'red_p': 'predator',
         }[agent_id]),
     ).environment(
         env=env_name,
         env_config={
-            'r_lone': 1.0,
-            'r_team': 5.0,
-            'r_prey': 0.0,
-            'coop_radius': 4,
+            'apple_respawn': 10,
             'max_cycles': 1000,
-            'render_mode': 'rgb_array',
         },
         clip_actions=True,
     ).rollouts(
         num_rollout_workers=4,
         rollout_fragment_length=128,
-    ).evaluation(
-        # evaluation_num_workers=2,
-        evaluation_interval=1,
-        # evaluation_parallel_to_training=True,
-        evaluation_duration=10,  # default unit is episodes
-        evaluation_config=DQNConfig.overrides(
-            env_config={
-                # "record_env": "videos",  # folder to store video?
-                "render_env": '~/video',
-            }, ),
     ).training(
         model={
             "custom_model": "SimpleMLPModelV2",
             "custom_model_config": {},
         },
         train_batch_size=1000,
-        lr=2e-5,
+        lr=1e-4,
         gamma=0.99,
         v_min=0.0,
         v_max=10.0,
         # double_q=True,
-    ).framework(framework="torch").resources(
-        num_gpus=1,
+    ).debugging(log_level="ERROR").framework(framework="torch").resources(
+        num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,
     )
+    explore_config = {
+        "type": EpsilonGreedy,
+        "initial_epsilon": 1.0,
+        "final_epsilon": 0.1,
+        "epsilon_timesteps": 100000,
+    }
+    config.explore = True,
+    config.exploration_config = explore_config
 
-    algo = config.build().from_checkpoint('/home/quanta/ray_results_new/wolfpack/dqn/DQN_wolfpack_d731e_00000_0_2023-05-21_14-27-24/checkpoint_000600')
+    # print(config.exploration_config)
+
+    algo = config.build().from_checkpoint('/home/quanta/gather_res/DQN_gathering_06939_00000_0_2023-05-21_00-59-51/checkpoint_000970')
 
     worker = algo.workers.local_worker()
     policy_map = worker.policy_map
-    policy_mapping_fn = worker.policy_mapping_fn
+    policy_mapping_fn = (lambda agent_id, *args, **kwargs: {
+        'blue_p': 'predator',
+        'red_p': 'predator',
+    }[agent_id])
     for policy_id in policy_map.keys():
         print(policy_id)
-    env = P2M(wolfpack_env_creator({
-        'r_lone': 1.0,
-        'r_team': 5.0,
-        'r_prey': 0.0,
-        'coop_radius': 4,
+    env = P2M(gathring_env_creator({
+        'apple_respawn': 10,
         'max_cycles': 1000,
     }))
     obs, _ = env.reset()
@@ -147,6 +140,7 @@ if __name__ == "__main__":
             action[agent_id] = algo.compute_single_action(
                 observation=obs[agent_id],
                 policy_id=policy_mapping_fn(agent_id),
+                # explore=False,
             )
         # action = algo.compute_single_action(obs)
         obs, reward, terminated, truncated, info = env.step(action)

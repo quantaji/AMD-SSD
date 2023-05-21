@@ -131,7 +131,7 @@ class GridWorldBase:
             self.render_on = False
 
     def enable_render(self):
-        self.screen = pygame.display.set_mode(size=self.resolution)
+        self.screen = pygame.display.set_mode(self.screen.get_size())
         self.renderOn = True
         self.draw()
 

@@ -22,37 +22,6 @@ from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
 from core.environments.wolfpack import wolfpack_env_creator
 
-
-class SimpleMLPModelV2(TorchModelV2, nn.Module):
-
-    def __init__(self, obs_space: gym.Space, act_space: gym.Space, num_outputs, *args, **kwargs):
-        TorchModelV2.__init__(self, obs_space, act_space, num_outputs, *args, **kwargs)
-        nn.Module.__init__(self)
-
-        self.flattened_obs_space = spaces.flatten_space(obs_space)
-        self.obs_space = obs_space
-        self.action_space = act_space
-
-        self.model = nn.Sequential(
-            nn.Flatten(start_dim=1, end_dim=-1),
-            nn.Linear(self.flattened_obs_space.shape[0], 128),
-            nn.ReLU(),
-            nn.Linear(128, 32),
-            nn.ReLU(),
-        )
-
-        self.policy_fn = nn.Linear(32, num_outputs)
-        self.value_fn = nn.Linear(32, 1)
-
-    def forward(self, input_dict, state, seq_lens):
-        model_out = self.model(input_dict["obs"].to(torch.float32) / 255)
-        self._value_out = self.value_fn(model_out)
-        return self.policy_fn(model_out), state
-
-    def value_function(self):
-        return self._value_out.flatten()
-
-
 if __name__ == "__main__":
     ray.init()
 
@@ -64,7 +33,6 @@ if __name__ == "__main__":
         env_name,
         lambda config: P2M(wolfpack_env_creator(config)),
     )
-    ModelCatalog.register_custom_model("SimpleMLPModelV2", SimpleMLPModelV2)
 
     config = DQNConfig().multi_agent(
         policies=['predator', 'prey'],
@@ -80,7 +48,7 @@ if __name__ == "__main__":
             'r_team': 5.0,
             'r_prey': 0.0,
             'coop_radius': 4,
-            'max_cycles': 1000,
+            'max_cycles': 1024,
         },
         clip_actions=True,
     ).rollouts(
@@ -88,10 +56,13 @@ if __name__ == "__main__":
         rollout_fragment_length=128,
     ).training(
         model={
-            "custom_model": "SimpleMLPModelV2",
-            "custom_model_config": {},
+            "conv_filters": [  # 16x21x3
+                [16, [4, 4], 2],  # 7x9x16
+                [32, [4, 4], 2],  # 2x3x32
+                [256, [4, 6], 1],
+            ],
         },
-        train_batch_size=1000,
+        train_batch_size=1024,
         lr=2e-5,
         gamma=0.99,
         v_min=0.0,
@@ -118,6 +89,6 @@ if __name__ == "__main__":
         stop={"timesteps_total": 1000000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
-        local_dir="~/ray_results/" + env_name,
+        local_dir="~/ray_results_new/" + env_name,
         config=config.to_dict(),
     )

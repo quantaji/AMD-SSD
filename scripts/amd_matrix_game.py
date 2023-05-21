@@ -80,9 +80,9 @@ if __name__ == "__main__":
             "custom_model_config": {},
         },
         train_batch_size=1024,
-        lr=2e-5,
+        lr=1e-3,
         gamma=0.99,
-        planner_reward_max=3,
+        planner_reward_max=3.0,
         force_zero_sum=False,
         param_assumption='softmax_single_state',
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     tune.run(
         AMD,
         # name="amd_with_r_planner_max=0.1",
-        name="actor_critic_with_no_planner",
+        name="Prisoner Dilemma",
         stop={"timesteps_total": 500000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,

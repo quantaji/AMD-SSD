@@ -20,3 +20,4 @@ from ray.rllib.policy.sample_batch import (concat_samples, concat_samples_into_m
 from ray.tune.registry import get_trainable_cls
 import ray.rllib.utils.exploration.epsilon_greedy
 import ray.rllib.utils.exploration.stochastic_sampling
+from pettingzoo.butterfly import cooperative_pong_v4

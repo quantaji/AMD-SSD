@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 import gymnasium as gym
 import numpy as np
@@ -17,7 +18,8 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 
 from core.algorithms.amd.amd import AMD, AMDConfig
-from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
+from core.algorithms.amd.wrappers import \
+    MultiAgentEnvFromPettingZooParallel as P2M
 from core.environments.wolfpack import wolfpack_env_creator
 
 
@@ -94,13 +96,52 @@ if __name__ == "__main__":
         num_cpus_per_worker=3,
     )
 
-    tune.run(
-        AMD,
-        # name="amd_with_r_planner_max=0.1",
-        name="ac_with_no_planner",
-        stop={"timesteps_total": 5000000},
-        keep_checkpoints_num=3,
-        checkpoint_freq=10,
-        local_dir="~/ray_results_new/" + env_name,
-        config=config.to_dict(),
-    )
+    algo = config.build().from_checkpoint('/home/quanta/ray_results_new/wolfpack/ac_with_no_planner/AMD_wolfpack_87f46_00000_0_2023-05-21_14-25-11/checkpoint_000440')
+
+    worker = algo.workers.local_worker()
+    policy_map = worker.policy_map
+    policy_mapping_fn = (lambda agent_id, *args, **kwargs: {
+        'wolf_1': 'wolf_1',
+        'wolf_2': 'wolf_1',
+        'prey': 'prey',
+    }[agent_id])
+    for policy_id in policy_map.keys():
+        print(policy_id)
+    env = P2M(wolfpack_env_creator({
+        'r_lone': 1.0,
+        'r_team': 5.0,
+        'r_prey': 0.0,
+        'coop_radius': 4,
+        'max_cycles': 1000,
+    }))
+    obs, _ = env.reset()
+    terminated = truncated = False
+
+    timestep = 0
+
+    env.par_env.env.render_mode = 'human'  # 'human'
+
+    env.render()
+    render_result = []
+
+    while not terminated and not truncated:
+
+        action = {}
+        for agent_id in obs.keys():
+            action[agent_id] = algo.compute_single_action(
+                observation=obs[agent_id],
+                policy_id=policy_mapping_fn(agent_id),
+                # explore=False,
+            )
+        # action = algo.compute_single_action(obs)
+        obs, reward, terminated, truncated, info = env.step(action)
+        terminated = terminated['__all__']
+        truncated = truncated['__all__']
+        timestep += 1
+
+        if env.par_env.env.render_mode == 'human':
+            time.sleep(0.2)
+            env.render()
+        else:
+            render_img = env.render()
+            render_result.append(render_img)

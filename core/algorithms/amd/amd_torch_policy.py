@@ -134,16 +134,16 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
         # the loss contains two parts, first the real rewards, by critit
         # and the second: the reward from central planner
-        pg_r_real = -torch.sum(log_probs * train_batch[Postprocessing.ADVANTAGES])
+        pg_r_real = -torch.mean(log_probs * train_batch[Postprocessing.ADVANTAGES])
         # ps: if this agent is not in cooperative list, its r_planner_cum is zero
-        pg_r_planner = -torch.sum(log_probs * train_batch[PreLearningProcessing.R_PLANNER_CUM])
+        pg_r_planner = -torch.mean(log_probs * train_batch[PreLearningProcessing.R_PLANNER_CUM])
 
         # Final policy loss.
         policy_loss = pg_r_real + pg_r_planner
 
         # Compute a value function loss.
         if self.config["use_critic"]:
-            value_loss = 0.5 * torch.sum(torch.pow(values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS], 2.0))
+            value_loss = 0.5 * torch.mean(torch.pow(values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS], 2.0))
         else:  # Ignore the value function.
             value_loss = 0.0
 
