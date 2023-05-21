@@ -63,7 +63,7 @@ if __name__ == "__main__":
             ],
         },
         train_batch_size=1024,
-        lr=2e-5,
+        lr=1e-4,
         gamma=0.99,
         v_min=0.0,
         v_max=10.0,
