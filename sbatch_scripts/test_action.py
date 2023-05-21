@@ -1,12 +1,17 @@
+"""Example of a custom experiment wrapped around an RLlib Algorithm."""
+import argparse
+from importlib import resources
+
+import ray
+from ray import tune
+import ray.rllib.algorithms.ppo as ppo
+
 import os
 import sys
 
 import gymnasium as gym
-import numpy as np
-import ray
 import torch
 from gymnasium import spaces
-from ray import tune
 from ray.rllib.algorithms.dqn import DQN, DQNConfig
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
@@ -22,6 +27,8 @@ from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
 from core.environments.gathering.env import gathring_env_creator
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--train-iterations", type=int, default=10)
 
 class SimpleMLPModelV2(TorchModelV2, nn.Module):
 
@@ -52,9 +59,49 @@ class SimpleMLPModelV2(TorchModelV2, nn.Module):
     def value_function(self):
         return self._value_out.flatten()
 
+def experiment(config):
+    iterations = config.pop("train-iterations")
+    
+    algo = DQN(config=config)
+    checkpoint = None
+    train_results = {}
+
+    # Train
+    for i in range(iterations):
+        train_results = algo.train()
+        if i % 2 == 0 or i == iterations - 1:
+            checkpoint = algo.save(tune.get_trial_dir())
+        tune.report(**train_results)
+    algo.stop()
+
+    # Manual Eval
+    config["num_workers"] = 0
+    eval_algo = DQN(config=config)
+    eval_algo.restore(checkpoint)
+    env = eval_algo.workers.local_worker().env
+
+    obs, info = env.reset()
+    done = False
+    eval_results = {"eval_reward": 0, "eval_eps_length": 0, "eval_beam_rate": 0}
+    while not done:
+        action = eval_algo.compute_single_action(obs)
+        next_obs, reward, done, truncated, info = env.step(action)
+        if action=='7':
+            eval_results["eval_beam_rate"] +=1
+        eval_results["eval_reward"] += reward
+        eval_results["eval_eps_length"] += 1
+    eval_results["eval_beam_rate"] /= eval_results["eval_eps_length"]
+    results = {**train_results, **eval_results}
+    tune.report(results)
+
 
 if __name__ == "__main__":
-    ray.init()
+    args = parser.parse_args()
+
+    ray.init(num_cpus=3)
+    # config = ppo.PPOConfig().environment("CartPole-v1")
+    # config = config.to_dict()
+    
 
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
@@ -105,16 +152,9 @@ if __name__ == "__main__":
     }
     config.explore = True,
     config.exploration_config = explore_config
-
-    print(config.exploration_config)
-    
-    # print(config.replay_buffer_config)
-    tune.run(
-        DQN,
-        name='dqn',
-        stop={"timesteps_total": 1000000},
-        keep_checkpoints_num=3,
-        checkpoint_freq=10,
-        local_dir="~/ray_results/" + env_name,
-        config=config.to_dict(),
-    )
+    config = config.to_dict()
+    config["train-iterations"] = args.train_iterations
+    tune.Tuner(
+        tune.with_resources(experiment, resources={"cpu":3}),
+        param_space=config,
+    ).fit()

@@ -2,14 +2,13 @@
 
 #SBATCH --job-name="forl-proj"
 #SBATCH --output=%j.out
-#SBATCH --time=10:15:00
+#SBATCH --time=1:15:00
 
 ### Give all resources to a single Ray task, ray can manage the resources internally
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
-#SBATCH --mem-per-cpu=6G
+#SBATCH --mem-per-cpu=3G
 #SBATCH --gpus=gtx_1080_ti:1
-
 ### storage
 #SBATCH --tmp=4G
 
@@ -44,7 +43,7 @@ fi
 # __doc_head_address_end__
 
 # __doc_head_ray_start__
-port=6379
+port=5498
 ip_head=$head_node_ip:$port
 export ip_head
 echo "IP Head: $ip_head"
@@ -55,4 +54,4 @@ srun ray start --head --node-ip-address=$head_node_ip --port=$port --redis-passw
 
 # __doc_script_start__
 echo "STARTING ALGORITHM with num of works of $worker_num ."
-python sbatch_scripts/amd_gathering.py
+python sbatch_scripts/test_action.py
