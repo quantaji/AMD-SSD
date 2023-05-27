@@ -21,9 +21,9 @@ from ray.rllib.utils.from_config import NotProvided
 from ray.rllib.utils.metrics import (NUM_AGENT_STEPS_SAMPLED, NUM_ENV_STEPS_SAMPLED, SYNCH_WORKER_WEIGHTS_TIMER)
 from ray.rllib.utils.typing import (EnvCreator, EnvType, MultiAgentPolicyConfigDict, PolicyID, ResultDict, SampleBatchType)
 
-from .action_distribution import TanhTorchDeterministic
+from .action_distribution import TanhTorchDeterministic, SigmoidTorchDeterministic
 from .callback import AMDDefualtCallback
-from .constants import (CENTRAL_PLANNER, DETERMINISTIC_DISTRIBUTION, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
+from .constants import (CENTRAL_PLANNER, TANH_DETERMINISTIC_DISTRIBUTION, SIGMOID_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
 from .utils import (action_to_reward, discounted_cumsum_factor_matrix, get_availability_mask, get_env_example)
 from .wrappers import MultiAgentEnvWithCentralPlanner
 
@@ -41,20 +41,27 @@ class AMDConfig(A3CConfig):
         self.policy_mapping_fn = (lambda agent_id, episode, worker, **kwargs: agent_id)  # each agent id shares different policy
 
         # this is the default if .adaptive_mechanism_design
-        self.agent_pseudo_lr = self.lr
-        self.central_planner_lr = self.lr
+        self.agent_pseudo_lr = 1.0
+        self.central_planner_lr = None
+        self.cp_model = None
         self.coop_agent_list = None
         self.param_assumption: str = 'neural'
         self.planner_reward_max: float = 1.0
         self.force_zero_sum: bool = False
-        self.grad_on_reward: bool = False
         self.planner_reward_cost: float = 0.0
+        self.reward_distribution: str = 'sigmoid'
+        self.awareness_batch_size: int = None
 
         # we don't sample async so
         self.sample_async = False
 
         ModelCatalog.register_custom_action_dist(TANH_DETERMINISTIC_DISTRIBUTION, TanhTorchDeterministic)
-        ModelCatalog.register_custom_action_dist(DETERMINISTIC_DISTRIBUTION, TorchDeterministic)
+        ModelCatalog.register_custom_action_dist(SIGMOID_DETERMINISTIC_DISTRIBUTION, SigmoidTorchDeterministic)
+
+        self.cp_action_dist_dic = {
+            'sigmoid': SIGMOID_DETERMINISTIC_DISTRIBUTION,
+            'tanh': TANH_DETERMINISTIC_DISTRIBUTION,
+        }
 
     @override(A3CConfig)
     def callbacks(self, callbacks_class) -> "AMDConfig":
@@ -85,23 +92,26 @@ class AMDConfig(A3CConfig):
         *,
         agent_pseudo_lr: Optional[float] = NotProvided,
         central_planner_lr: Optional[float] = NotProvided,
+        cp_model: Optional[dict] = NotProvided,
         coop_agent_list: Optional[List[str]] = NotProvided,
         param_assumption: Optional[str] = NotProvided,
         planner_reward_max: Optional[float] = NotProvided,
         force_zero_sum: Optional[bool] = NotProvided,
-        grad_on_reward: Optional[bool] = NotProvided,
         planner_reward_cost: Optional[float] = NotProvided,
+        reward_distribution: Optional[str] = NotProvided,
+        awareness_batch_size: Optional[int] = NotProvided,
         **kwargs,
     ) -> "AMDConfig":
         """
-        agent_pseudo_lr: the learning rate of individual agents assumed by central planner, default to be equal to lr
+        agent_pseudo_lr: the learning rate of individual agents assumed by central planner, default is 1.0.
         central_planner_lr: the learning rate of central planner, default to be lr TODO currently this is not supported
         coop_agent_list: a list of agent_id in the environment that is wished to be designed to be cooperative. For example, when agent includes prey and predator, we only wish preditors to be cooperative. This spetifies the agent in amd's loss.
         param_assumption: assump the policy to be parametrized by direct softmax or neural, this affect how the algoirthm calculate the awareness.
         planner_reward_max: [-R, R] for planner
         force_zero_sum: force the reward to minus its mean, in all cooperative agents.
-        grad_on_reward, whether the reward can be pass gradient, TODO this is not used and for futher, set to be false
-        planner_reward_cost: the loss penalty of using reward, TODO currently this is not supported since the loss cannot pass gradient from reward_planner
+        planner_reward_cost: the loss penalty of using reward
+        reward_distribution: diterministic, whether tanh or sigmoid
+        awareness_batch_size: the batch size for computing awareness, used for saving gpu vram, default is None, which means all the batch
         """
         super().training(**kwargs)
 
@@ -117,10 +127,18 @@ class AMDConfig(A3CConfig):
             self.planner_reward_max = planner_reward_max
         if force_zero_sum is not NotProvided:
             self.force_zero_sum = force_zero_sum
-        if grad_on_reward is not NotProvided:
-            self.grad_on_reward = grad_on_reward
         if planner_reward_cost is not NotProvided:
             self.planner_reward_cost = planner_reward_cost
+
+        assert reward_distribution in ['sigmoid', 'tanh', NotProvided], "reward_distribution should be either 'tanh' or 'sigmoid'!"
+        if reward_distribution is not NotProvided:
+            self.reward_distribution = reward_distribution
+
+        if awareness_batch_size is not NotProvided:
+            self.awareness_batch_size = awareness_batch_size
+
+        if cp_model is not NotProvided:
+            self.cp_model = cp_model
 
         return self
 
@@ -154,7 +172,17 @@ class AMDConfig(A3CConfig):
         # here, modify central planner's distribution
         # then in rollout worker, it will create the corresponding policy with distribution
         # the policies now is a dict that maps to algorithm config object
-        policies[CENTRAL_PLANNER].config.model['custom_action_dist'] = TANH_DETERMINISTIC_DISTRIBUTION
+        if self.central_planner_lr:
+            policies[CENTRAL_PLANNER].config.lr = self.central_planner_lr
+
+        if self.cp_model:
+            for key in self.cp_model.keys():
+                policies[CENTRAL_PLANNER].config.model[key] = self.cp_model[key]
+
+        policies[CENTRAL_PLANNER].config.model['custom_action_dist'] = self.cp_action_dist_dic[self.reward_distribution]
+
+        # force central planner to not explore
+        policies[CENTRAL_PLANNER].config.explore = False
 
         return policies, is_policy_to_train
 
@@ -318,8 +346,10 @@ class AMD(A3C):
                 batch = train_batch[policy_id]
                 avail = avail_uf[policy_id].reshape(-1).astype(bool)
                 total_advantages[avail] += batch[Postprocessing.ADVANTAGES]
+                # total_advantages[avail] += batch[SampleBatch.REWARDS]
 
         train_batch[CENTRAL_PLANNER][PreLearningProcessing.TOTAL_ADVANTAGES] = total_advantages
+        # train_batch[CENTRAL_PLANNER][PreLearningProcessing.TOTAL_ADVANTAGES] = cumsum_factor_matrix @ total_advantages
 
         # then distribute them to all cooperative agents
         for policy_id in self.config["coop_agent_list"]:

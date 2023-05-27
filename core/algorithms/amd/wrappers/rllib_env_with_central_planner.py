@@ -9,7 +9,7 @@ from gymnasium.vector.utils import create_empty_array
 from ray.rllib.env.multi_agent_env import ENV_STATE, MultiAgentEnv
 from ray.rllib.utils.typing import MultiAgentDict
 
-from ..constants import CENTRAL_PLANNER, STATE_SPACE
+from ..constants import CENTRAL_PLANNER, STATE_SPACE, PreLearningProcessing
 
 
 class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
@@ -83,6 +83,9 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
         self._obs_space_in_preferred_format = self._check_if_obs_space_maps_agent_id_to_sub_space()
         self._action_space_in_preferred_format = self._check_if_action_space_maps_agent_id_to_sub_space()
 
+        # used to store obs for central planner to calculate
+        self.last_obss: MultiAgentDict = None
+
         super().__init__()
 
     def observe_central_planner(self, obss: MultiAgentDict, acts: MultiAgentDict = None):
@@ -117,10 +120,14 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
         seed: int | None = None,
         options: dict | None = None,
     ) -> Tuple[MultiAgentDict, MultiAgentDict]:
+        # The key problem is that central planner's observation won't be complete until all agent gets their action...
+        # the solution is to store the observation in next_obs 
+
         obss, infos = self.env.reset(seed=seed, options=options)
 
-        # now get the observation of central planner
         obss[self.CENTRAL_PLANNER] = self.observe_central_planner(obss)
+
+        self.last_obss = obss
 
         return obss, infos
 
@@ -130,11 +137,12 @@ class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):
 
         terminateds[self.CENTRAL_PLANNER] = terminateds["__all__"]
         truncateds[self.CENTRAL_PLANNER] = truncateds["__all__"]
-        infos[self.CENTRAL_PLANNER] = {}
 
         rews[self.CENTRAL_PLANNER] = 0.0
 
-        obss[self.CENTRAL_PLANNER] = self.observe_central_planner(obss=obss, acts=action_dict)
+        obss[self.CENTRAL_PLANNER] = self.observe_central_planner(obss=self.last_obss, acts=action_dict)  # this obs is useless, because the at the last timestep, it will be abandoned
+
+        self.last_obss = obss
 
         return obss, rews, terminateds, truncateds, infos
 

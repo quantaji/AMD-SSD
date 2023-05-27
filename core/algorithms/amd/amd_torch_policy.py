@@ -10,15 +10,17 @@ from gymnasium import spaces
 from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
 from ray.rllib.evaluation import Episode
 from ray.rllib.evaluation.episode import Episode
-from ray.rllib.evaluation.postprocessing import Postprocessing, compute_gae_for_sample_batch
+from ray.rllib.evaluation.postprocessing import (Postprocessing, compute_gae_for_sample_batch)
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch import torch_modelv2
+from ray.rllib.models.torch.torch_action_dist import TorchCategorical
 from ray.rllib.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.numpy import convert_to_numpy
+from ray.rllib.utils.torch_utils import apply_grad_clipping, sequence_mask
 from ray.rllib.utils.typing import TensorStructType, TensorType
 from torch.func import functional_call, jacrev
 
@@ -92,6 +94,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             return convert_to_numpy({
                 "agent_policy_loss": torch.mean(torch.stack(self.get_tower_stats("agent_policy_loss"))),
                 "agent_value_loss": torch.mean(torch.stack(self.get_tower_stats("agent_value_loss"))),
+                "agent_entropy_loss": torch.mean(torch.stack(self.get_tower_stats("agent_entropy_loss"))),
                 "cur_lr": self.cur_lr,
             })
 
@@ -111,6 +114,8 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             # Since the default class is agent, we only have to pass a r_planner term
             sample_batch[PreLearningProcessing.R_PLANNER_CUM] = 0 * sample_batch[SampleBatch.REWARDS]
             sample_batch[PreLearningProcessing.AWARENESS] = 0 * sample_batch[SampleBatch.REWARDS]
+        else:
+            sample_batch[SampleBatch.OBS] = sample_batch[SampleBatch.NEXT_OBS]  # shift back
 
         return sample_batch
 
@@ -126,6 +131,14 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         # get value estimation by critic
         values = model.value_function()
 
+        if self.is_recurrent():
+            B = len(train_batch[SampleBatch.SEQ_LENS])
+            max_seq_len = dist_inputs.shape[0] // B
+            mask_orig = sequence_mask(train_batch[SampleBatch.SEQ_LENS], max_seq_len)
+            valid_mask = torch.reshape(mask_orig, [-1])
+        else:
+            valid_mask = torch.ones_like(values, dtype=torch.bool)
+
         # Create an action distribution object.
         action_dist = dist_class(dist_inputs, model)
 
@@ -134,25 +147,36 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
         # the loss contains two parts, first the real rewards, by critit
         # and the second: the reward from central planner
-        pg_r_real = -torch.mean(log_probs * train_batch[Postprocessing.ADVANTAGES])
-        # ps: if this agent is not in cooperative list, its r_planner_cum is zero
-        pg_r_planner = -torch.mean(log_probs * train_batch[PreLearningProcessing.R_PLANNER_CUM])
+        # # ps: if this agent is not in cooperative list, its r_planner_cum is zero
+        total_advantages = train_batch[Postprocessing.ADVANTAGES] + train_batch[PreLearningProcessing.R_PLANNER_CUM]
 
         # Final policy loss.
-        policy_loss = pg_r_real + pg_r_planner
+        policy_loss = -torch.mean(torch.masked_select(
+            log_probs * total_advantages,
+            valid_mask,
+        ))
 
         # Compute a value function loss.
         if self.config["use_critic"]:
-            value_loss = 0.5 * torch.mean(torch.pow(values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS], 2.0))
+            value_loss = 0.5 * torch.mean(torch.pow(
+                torch.masked_select(
+                    values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS],
+                    valid_mask,
+                ),
+                2.0,
+            ))
         else:  # Ignore the value function.
             value_loss = 0.0
+
+        entropy = torch.sum(torch.masked_select(action_dist.entropy(), valid_mask))
 
         # Store values for stats function in model (tower), such that for
         # multi-GPU, we do not override them during the parallel loss phase.
         model.tower_stats["agent_policy_loss"] = policy_loss
         model.tower_stats["agent_value_loss"] = value_loss
+        model.tower_stats["agent_entropy_loss"] = entropy
 
-        total_loss = policy_loss + self.config['vf_loss_coeff'] * value_loss
+        total_loss = policy_loss + self.config['vf_loss_coeff'] * value_loss - entropy * self.entropy_coeff
 
         return total_loss
 
@@ -194,7 +218,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             cumsum_factor_matrix = discounted_cumsum_factor_matrix(eps_id=cp_eps_id, t=cp_t)
             r_planner_cum = cumsum_factor_matrix @ r_planner
 
-            policy_loss = -torch.mean(train_batch[PreLearningProcessing.AWARENESS] * r_planner_cum)
+            policy_loss = -torch.mean(train_batch[PreLearningProcessing.AWARENESS] * r_planner_cum) * self.config['agent_pseudo_lr']
             reward_cost = ((r_planner**2).sum(-1)**0.5).mean()
 
         model.tower_stats["planner_policy_loss"] = policy_loss
@@ -276,24 +300,34 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             Agents do policy gradient with assumtion of softmax parameterizization. In this case:
                 p(a, s) = softmax(theta(a', s)) (a)
                 paital{logp(a, s)}{theta(a', s')} = 1{s=s', a=a'} - pi(a', s)1{s=s'}
-            Therefore, we only need to return jacobian(logp, theta) as tensor:
-                1 - pi(a, s)
-            of shape (Batch, num_actions).
             NOTE: 'softmax' option natually assumes a multinomial distribution, so the model's output is assumed to be the logits.
-            NOTE: Determining state is equal or not is difficult for me, so I assume every input state is not equal, therefore, the result is simply g_log_p(s)^2.sum x total_advantage
+            NOTE: Determining state is equal or not is difficult. Therefore, I use hash function over observation.
+            Derivation:
+                awareness(tau) := (sum_t nabla_theta logpi(a_t, s_t) * delta_t) ^T nabla_theta logpi(a_tau, s_tau)
+                = sum_{t, a', s'} delta_t x 1{s_t = s'} x (1{a_t = a'} - pi(a', s_t)) x 1{s_tau = s'} x (1{a_tau = a'} - pi(a', s_tau))
+            We define j_t = 1{a_t = a'} - pi(a', s_t) in R^{|A|} as a vector of dimension of actiona space, then
+                awareness(tau) = sum_{t, s'} delta_t x 1{s_t = s'} x 1{s_tau = s'} x (j_t ^T j_tau)
+                =  sum_{t} delta_t x 1{s_t = s_tau} x (j_t ^T j_tau)
+                = M x delta
+            M_{i,j} := 1{s_i = s_j} x (j_i ^T j_j) as a TxT matrix, and delta = [delta_t] is a Tx1 matrix
             """
-            logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
-            g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
-            awareness += (g_logp_s**2).sum(dim=-1) * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1)
+            assert self.dist_class == TorchCategorical, "Softmax parameterization assumtion assumse tabular case, where action is discrete and therefore, action distribution class is catagorical!"
 
-        elif self.config['param_assumption'] == 'softmax_single_state':
-            """Agent with softmax parameterization assumption and all states are the same
-            """
             logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
-            g_logp_s = 1 - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
 
-            pg = (g_logp_s * (copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1, 1))).sum(dim=0)
-            awareness += (pg.reshape(1, -1) * g_logp_s).sum(dim=-1).reshape(-1)
+            num_actions = logits.shape[1]
+            jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS].long(), num_classes=num_actions) - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
+
+            obs = copied_batch[SampleBatch.OBS].detach().cpu().numpy()
+            obs_hash = np.apply_along_axis(
+                lambda arr: hash(arr.data.tobytes()),
+                1,
+                obs.reshape(obs.shape[0], -1),
+            )  # this funciton computes the observation's hash
+
+            M = (jac_logp_s @ jac_logp_s.T) * torch.from_numpy((obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))).to(jac_logp_s)
+
+            awareness += (M @ copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1, 1)).reshape(-1)
 
         else:
             raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
