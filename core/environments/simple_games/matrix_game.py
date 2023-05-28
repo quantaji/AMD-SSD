@@ -12,7 +12,11 @@ from .base import SimpleGameEnv
 
 class MatrixGameEnv(SimpleGameEnv):
 
-    def __init__(self, fear, greed):
+    def __init__(
+        self,
+        fear: float,
+        greed: float,
+    ):
         self.fear = fear
         self.greed = greed
 

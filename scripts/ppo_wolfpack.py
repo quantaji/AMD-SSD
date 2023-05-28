@@ -39,14 +39,23 @@ if __name__ == "__main__":
         env=env_name,
         env_config=config_template,
     ).rollouts(num_rollout_workers=4, rollout_fragment_length=128).training(
+        # model={
+        #     "conv_filters": [  # 16x21x3
+        #         [16, [4, 4], 2],  # 7x9x16
+        #         [32, [4, 4], 2],  # 2x3x32
+        #         [256, [4, 6], 1],
+        #     ],
+        # },
         model={
             "conv_filters": [  # 16x21x3
-                [16, [4, 4], 2],  # 7x9x16
-                [32, [4, 4], 2],  # 2x3x32
-                [256, [4, 6], 1],
+                [8, [4, 4], 1],  # 7x9x16
             ],
+            "post_fcnet_hiddens": [32, 32],
+            "use_lstm": True,
+            "lstm_cell_size": 128,
+            "max_seq_len": 32,
         },
-        train_batch_size=512,
+        train_batch_size=1024,
         lr=1e-4,
         gamma=0.99,
         lambda_=0.9,
@@ -55,7 +64,7 @@ if __name__ == "__main__":
         grad_clip=None,
         entropy_coeff=0.1,
         vf_loss_coeff=0.25,
-        sgd_minibatch_size=64,
+        sgd_minibatch_size=256,
         num_sgd_iter=10,
     ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
@@ -71,10 +80,11 @@ if __name__ == "__main__":
 
     tune.run(
         "PPO",
-        name="PPO",
+        name="PPO-lstm-setting-3",
         stop={"timesteps_total": 5000000},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
-        local_dir="~/ray_results_new/" + env_name,
+        local_dir="~/ray_experiment_results/" + env_name,
+        # local_dir="~/ray_test/" + env_name,
         config=config.to_dict(),
     )

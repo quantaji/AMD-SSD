@@ -70,8 +70,8 @@ class SimpleGameEnv(ParallelEnv):
             self.seed(seed=seed)
 
         self.agents = self.possible_agents[:]
-        self._state = self.initial_state()
         self.time_steps = 0
+        self._state = self.initial_state()
 
         if return_info:
             return self.observations(), {}
