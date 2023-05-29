@@ -7,17 +7,18 @@ import ray
 import torch
 from ray import tune
 from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.tune.registry import register_env
 from torch import nn
+import supersuit as ss
 
 module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
     sys.path.append(module_path)
 
 from core.environments.wolfpack import wolfpack_env_creator
+from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
 
 if __name__ == "__main__":
     ray.init()
@@ -34,54 +35,43 @@ if __name__ == "__main__":
         'max_cycles': 1024,
     }
 
-    register_env(env_name, lambda config: ParallelPettingZooEnv(wolfpack_env_creator(config)))
+    register_env(env_name, lambda config: P2M(ss.normalize_obs_v0(
+        ss.dtype_v0(
+            wolfpack_env_creator(config),
+            np.float32,
+        ),
+        env_min=-0.5,
+        env_max=0.5,
+    )))
 
     config = PPOConfig().environment(
         env=env_name,
         env_config=config_template,
-    ).rollouts(num_rollout_workers=4, rollout_fragment_length=128).training(
-        # model={
-        #     "conv_filters": [  # 16x21x3
-        #         [16, [4, 4], 2],  # 7x9x16
-        #         [32, [4, 4], 2],  # 2x3x32
-        #         [256, [4, 6], 1],
-        #     ],
-        # },
-        # model={
-        #     "conv_filters": [  # 16x21x3
-        #         [8, [4, 4], 1],  # 7x9x16
-        #     ],
-        #     "post_fcnet_hiddens": [32, 32],
-        #     "use_lstm": True,
-        #     "lstm_cell_size": 128,
-        #     "max_seq_len": 32,
-        # },
+    ).rollouts(
+        num_rollout_workers=6,
+        rollout_fragment_length=1024,
+        num_envs_per_worker=16,
+    ).training(
         model={
-            "conv_filters": [  # 16x21x3
-                [16, [4, 4], 2],  # 7x9x16
-                [32, [4, 4], 2],  # 2x3x32
-                [64, [4, 6], 1],
+            "conv_filters": [
+                [6, [3, 3], 1],
             ],
-            "post_fcnet_hiddens": [128],
+            "post_fcnet_hiddens": [32, 32],
             "use_lstm": True,
             "lstm_cell_size": 128,
             "max_seq_len": 32,
         },
-        # train_batch_size=16384,
-        train_batch_size=8192,
+        train_batch_size=16 * 6 * 1024,
         lr=1e-4,
+        lr_schedule=[[0, 0.00136], [20000000, 0.000028]],
         gamma=0.99,
-        lambda_=0.9,
-        use_gae=True,
-        clip_param=0.4,
-        grad_clip=None,
-        entropy_coeff=0.1,
-        vf_loss_coeff=0.25,
-        sgd_minibatch_size=1024,
+        entropy_coeff=0.000687,
+        vf_loss_coeff=1e-4,
+        sgd_minibatch_size=16 * 6 * 1024 // 4,
         num_sgd_iter=10,
     ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-        num_cpus_per_worker=3,
+        num_cpus_per_worker=1,
     ).multi_agent(
         policies=['predator', 'prey'],
         policy_mapping_fn=(lambda agent_id, *args, **kwargs: {
@@ -93,11 +83,11 @@ if __name__ == "__main__":
 
     tune.run(
         "PPO",
-        name="PPO-with-living-panelty",
-        stop={"timesteps_total": 5000000},
+        name="PPO-config-from-other-paper",
+        stop={"timesteps_total": 500 * (10**6)},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
-        local_dir="~/ray_experiment_results/" + env_name,
-        # local_dir="~/ray_test/" + env_name,
+        # local_dir="~/ray_experiment_results/" + env_name,
+        local_dir="~/ray_test/" + env_name,
         config=config.to_dict(),
     )

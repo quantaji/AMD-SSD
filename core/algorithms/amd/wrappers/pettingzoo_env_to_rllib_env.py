@@ -36,8 +36,8 @@ class MultiAgentEnvFromPettingZooParallel(MultiAgentEnv):
         super().__init__()
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        obs, info = self.par_env.reset(seed=seed, return_info=True, options=options)
-        return obs, info or {}
+        obs, info = self.par_env.reset(seed=seed, options=options)
+        return obs, info
 
     def step(self, action_dict):
         obss, rews, terminateds, truncateds, infos = self.par_env.step(action_dict)

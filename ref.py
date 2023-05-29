@@ -28,4 +28,4 @@ from ray.tune.registry import get_trainable_cls
 import ray.rllib.evaluation.sampler
 from ray.rllib.models.torch.fcnet import FullyConnectedNetwork
 from ray.rllib.models.torch.visionnet import VisionNetwork
-
+from supersuit import normalize_obs_v0

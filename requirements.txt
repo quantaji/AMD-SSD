@@ -14,6 +14,7 @@ pettingzoo # another package for multi-agent-rl, both pettingzoo and gymnasium i
 # minigrid # another farama's package for easy implementing grid-world games
 # tianshou # this is another RL training framework, more light-weighted than rllib
 ## PS: pytorch lighning is not an ideal RL training framework we should not use this, rllib have its own trainner.
+supersuit # normalization wrappers
 
 # environment related
 pygame

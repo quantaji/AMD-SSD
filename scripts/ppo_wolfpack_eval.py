@@ -71,7 +71,9 @@ if __name__ == "__main__":
         }[agent_id]),
     )
 
-    algo = config.build().from_checkpoint('/home/quanta/ray_results_new/wolfpack/PPO/PPO_wolfpack_0e5b8_00000_0_2023-05-21_21-16-58/checkpoint_002500')
+    algo = config.build().from_checkpoint(
+        # '/home/quanta/ray_results_new/wolfpack/PPO/PPO_wolfpack_0e5b8_00000_0_2023-05-21_21-16-58/checkpoint_002500'
+        '/home/quanta/ray_experiment_results/wolfpack/PPO-lstm-setting-3/PPO_wolfpack_e73c7_00000_0_2023-05-28_15-45-27/checkpoint_004880', )
 
     worker = algo.workers.local_worker()
     policy_map = worker.policy_map

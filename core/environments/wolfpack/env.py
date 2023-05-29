@@ -1,3 +1,4 @@
+import time
 from abc import ABC
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,7 +43,8 @@ class Wolfpack(GridWorldBase):
         randomizer: np.random.Generator,
         r_lone: float = 1.0,
         r_team: float = 5.0,
-        r_prey: float = 0.1,  # living reward for prey, this is constantly given
+        r_prey: float = 0.0,  # living reward for prey, this is constantly given
+        r_starv: float = -0.01,  # penalty for starving for two wolves
         coop_radius: int = 6,
         max_cycles: int = 1024,
     ):
@@ -54,6 +56,7 @@ class Wolfpack(GridWorldBase):
         self.r_lone = r_lone
         self.r_team = r_team
         self.r_prey = r_prey
+        self.r_starv = r_starv
         self.coop_radius = coop_radius
 
         self.max_cycles = max_cycles
@@ -157,6 +160,8 @@ class Wolfpack(GridWorldBase):
 
         self.reinit()  # reset all rewards etc
         self.rewards['prey'] = self.r_prey  # give living rewards for prey
+        self.rewards['wolf_1'] = self.r_starv  # this is a temporary code, for starvation of wolves
+        self.rewards['wolf_2'] = self.r_starv
 
         if (dist_1 <= 1.0) or (dist_2 <= 1.0):
             # terminates
@@ -215,25 +220,20 @@ class WolfpackEnv(ParallelEnv):
         self.state_space = spaces.Box(low=0, high=255, shape=self.state_shape, dtype=np.uint8)
 
     def seed(self, seed=None):
+        if not seed:
+            seed = int(time.time())
         self.randomizer, seed = seeding.np_random(seed)
         self.env = Wolfpack(self.randomizer, **self._kwargs)
 
     def reset(
         self,
         seed: Optional[int] = None,
-        return_info: bool = False,
         options: Optional[dict] = None,
     ) -> ObsDict:
-        if seed is not None:
-            self.seed(seed=seed)
+        self.seed(seed=seed)
         self.env.reset()
-
         self.agents = self.possible_agents[:]
-
-        if return_info:
-            return self.env.observations(), {}
-        else:
-            return self.env.observations()
+        return self.env.observations(), self.env.infos
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]
@@ -271,7 +271,8 @@ class WolfpackEnv(ParallelEnv):
 def wolfpack_env_creator(config: Dict[str, Any] = {
     'r_lone': 1.0,
     'r_team': 5.0,
-    'r_prey': 0.1,
+    'r_prey': 0.0,
+    'r_starv': -0.01,
     'coop_radius': 6,
     'max_cycles': 1024,
 }) -> WolfpackEnv:
@@ -279,6 +280,7 @@ def wolfpack_env_creator(config: Dict[str, Any] = {
         r_lone=config['r_lone'],
         r_team=config['r_team'],
         r_prey=config['r_prey'],
+        r_starv=config['r_starv'],
         max_cycles=config['max_cycles'],
     )
     return env
@@ -287,7 +289,8 @@ def wolfpack_env_creator(config: Dict[str, Any] = {
 wolfpack_env_default_config: Dict[str, Any] = {
     'r_lone': 1.0,
     'r_team': 5.0,
-    'r_prey': 0.1,
+    'r_starv': -0.01,
+    'r_prey': 0.0,
     'coop_radius': 6,
     'max_cycles': 1024,
 }

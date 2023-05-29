@@ -50,6 +50,7 @@ if __name__ == "__main__":
             'r_lone': 1.0,
             'r_team': 5.0,
             'r_prey': 0.0,
+            'r_starv': -0.01,
             'coop_radius': 4,
             'max_cycles': 1000,
             'render_mode': 'rgb_array',
@@ -87,7 +88,7 @@ if __name__ == "__main__":
         num_cpus_per_worker=3,
     )
 
-    algo = config.build().from_checkpoint('/home/quanta/ray_results_new/wolfpack/dqn/DQN_wolfpack_c6521_00000_0_2023-05-21_20-24-50/checkpoint_000500')
+    algo = config.build().from_checkpoint('/home/quanta/ray_experiment_results/wolfpack/dqn-with-living-panelty-dual/DQN_wolfpack_d2542_00000_0_2023-05-30_00-11-55/checkpoint_000077')
 
     worker = algo.workers.local_worker()
     policy_map = worker.policy_map
@@ -98,6 +99,7 @@ if __name__ == "__main__":
         'r_lone': 1.0,
         'r_team': 5.0,
         'r_prey': 0.0,
+·        'r_starv': -0.01,
         'coop_radius': 4,
         'max_cycles': 1000,
     }))
