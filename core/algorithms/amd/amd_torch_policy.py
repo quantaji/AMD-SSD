@@ -16,6 +16,7 @@ from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch import torch_modelv2
 from ray.rllib.models.torch.torch_action_dist import TorchCategorical
 from ray.rllib.policy import Policy
+from ray.rllib.policy.rnn_sequencing import pad_batch_to_sequences_of_same_size
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.annotations import override
@@ -128,6 +129,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
         # Pass the training data through our model to get distribution parameters.
         dist_inputs, _ = model(train_batch)
+
         # get value estimation by critic
         values = model.value_function()
 
@@ -140,35 +142,29 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             valid_mask = torch.ones_like(values, dtype=torch.bool)
 
         # Create an action distribution object.
-        action_dist = dist_class(dist_inputs, model)
+        action_dist = dist_class(dist_inputs[valid_mask], model)
 
         # Calculate the vanilla PG loss based on: L = -E[ log(pi(a|s)) * A]
-        log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS])
+        log_probs = action_dist.logp(train_batch[SampleBatch.ACTIONS][valid_mask])
 
         # the loss contains two parts, first the real rewards, by critit
         # and the second: the reward from central planner
         # # ps: if this agent is not in cooperative list, its r_planner_cum is zero
-        total_advantages = train_batch[Postprocessing.ADVANTAGES] + train_batch[PreLearningProcessing.R_PLANNER_CUM]
+        total_advantages = train_batch[Postprocessing.ADVANTAGES][valid_mask] + train_batch[PreLearningProcessing.R_PLANNER_CUM][valid_mask]
 
         # Final policy loss.
-        policy_loss = -torch.mean(torch.masked_select(
-            log_probs * total_advantages,
-            valid_mask,
-        ))
+        policy_loss = -torch.mean(log_probs * total_advantages, )
 
         # Compute a value function loss.
         if self.config["use_critic"]:
             value_loss = 0.5 * torch.mean(torch.pow(
-                torch.masked_select(
-                    values.reshape(-1) - train_batch[Postprocessing.VALUE_TARGETS],
-                    valid_mask,
-                ),
+                values.reshape(-1)[valid_mask] - train_batch[Postprocessing.VALUE_TARGETS][valid_mask],
                 2.0,
             ))
         else:  # Ignore the value function.
             value_loss = 0.0
 
-        entropy = torch.sum(torch.masked_select(action_dist.entropy(), valid_mask))
+        entropy = torch.sum(action_dist.entropy())
 
         # Store values for stats function in model (tower), such that for
         # multi-GPU, we do not override them during the parallel loss phase.
@@ -190,6 +186,14 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         # Pass the training data through our model to get distribution parameters.
         dist_inputs, _ = model(train_batch)
 
+        if self.is_recurrent():
+            B = len(train_batch[SampleBatch.SEQ_LENS])
+            max_seq_len = train_batch[SampleBatch.REWARDS].shape[0] // B
+            mask_orig = sequence_mask(train_batch[SampleBatch.SEQ_LENS], max_seq_len)
+            valid_mask = torch.reshape(mask_orig, [-1])
+        else:
+            valid_mask = torch.ones_like(train_batch[SampleBatch.REWARDS], dtype=torch.bool)
+
         policy_loss = torch.zeros_like(dist_inputs, requires_grad=True).mean()
         reward_cost = torch.zeros_like(policy_loss, requires_grad=True)
 
@@ -197,7 +201,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         if self.config['planner_reward_max'] > 0.0:
 
             # Create an action distribution object.
-            action_dist = dist_class(dist_inputs, model)
+            action_dist = dist_class(dist_inputs[valid_mask], model)
 
             # Compute the actual actions
             actions = action_dist.deterministic_sample()
@@ -208,17 +212,17 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
                 appearance=self.appearance,
                 reward_max=self.config['planner_reward_max'],
                 zero_sum=self.config['force_zero_sum'],
-                availability=train_batch[PreLearningProcessing.AVAILABILITY],
+                availability=train_batch[PreLearningProcessing.AVAILABILITY][valid_mask],
             )
 
             # get the matrix for computing accumulated reward
             # fix: somehow on clusters, discoutned factor matrix is not T x T
-            cp_t = train_batch[SampleBatch.T]
-            cp_eps_id = train_batch[SampleBatch.EPS_ID]
+            cp_t = train_batch[SampleBatch.T][valid_mask]
+            cp_eps_id = train_batch[SampleBatch.EPS_ID][valid_mask]
             cumsum_factor_matrix = discounted_cumsum_factor_matrix(eps_id=cp_eps_id, t=cp_t)
             r_planner_cum = cumsum_factor_matrix @ r_planner
 
-            policy_loss = -torch.mean(train_batch[PreLearningProcessing.AWARENESS] * r_planner_cum) * self.config['agent_pseudo_lr']
+            policy_loss = -torch.mean(train_batch[PreLearningProcessing.AWARENESS][valid_mask] * r_planner_cum) * self.config['agent_pseudo_lr']
             reward_cost = ((r_planner**2).sum(-1)**0.5).mean()
 
         model.tower_stats["planner_policy_loss"] = policy_loss
@@ -234,9 +238,28 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         if not self.is_central_planner:
             raise ValueError  # this can only happen to central planner
 
-        copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
-        dist_input, _ = self.model(copied_batch)
-        action_dist = self.dist_class(dist_input, self.model)
+        # I found there is some stange post processing for rnn...
+        copied_batch = sample_batch.copy(shallow=False)
+        if not copied_batch.zero_padded:
+            pad_batch_to_sequences_of_same_size(
+                batch=copied_batch,
+                max_seq_len=self.max_seq_len,
+                shuffle=False,
+                batch_divisibility_req=self.batch_divisibility_req,
+                view_requirements=self.view_requirements,
+            )
+        copied_batch = self._lazy_tensor_dict(copied_batch)  # this also convert batch to device
+
+        if self.is_recurrent():
+            B = len(copied_batch[SampleBatch.SEQ_LENS])
+            max_seq_len = copied_batch[SampleBatch.REWARDS].shape[0] // B
+            mask_orig = sequence_mask(copied_batch[SampleBatch.SEQ_LENS], max_seq_len)
+            valid_mask = torch.reshape(mask_orig, [-1])
+        else:
+            valid_mask = torch.ones_like(copied_batch[SampleBatch.REWARDS], dtype=torch.bool)
+
+        dist_inputs, _ = self.model(copied_batch)
+        action_dist = self.dist_class(dist_inputs[valid_mask], self.model)
         actions = action_dist.deterministic_sample()
 
         return actions.detach().cpu().numpy()
@@ -264,8 +287,26 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             return sample_batch
 
         # get ready for calculating awareness
-        copied_batch = self._lazy_tensor_dict(sample_batch.copy(shallow=False))  # this also convert batch to device
-        awareness = torch.zeros(copied_batch[SampleBatch.REWARDS].shape, device=self.device)
+        copied_batch = sample_batch.copy(shallow=False)
+        if not copied_batch.zero_padded:
+            pad_batch_to_sequences_of_same_size(
+                batch=copied_batch,
+                max_seq_len=self.max_seq_len,
+                shuffle=False,
+                batch_divisibility_req=self.batch_divisibility_req,
+                view_requirements=self.view_requirements,
+            )
+        copied_batch = self._lazy_tensor_dict(copied_batch)  # this also convert batch to device
+
+        if self.is_recurrent():
+            B = len(copied_batch[SampleBatch.SEQ_LENS])
+            max_seq_len = copied_batch[SampleBatch.REWARDS].shape[0] // B
+            mask_orig = sequence_mask(copied_batch[SampleBatch.SEQ_LENS], max_seq_len)
+            valid_mask = torch.reshape(mask_orig, [-1])
+        else:
+            valid_mask = torch.ones_like(copied_batch[SampleBatch.REWARDS], dtype=torch.bool)
+
+        awareness = torch.zeros(copied_batch[SampleBatch.REWARDS][valid_mask].shape, device=self.device)
 
         if self.config['param_assumption'] == 'neural':
             """
@@ -273,10 +314,10 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             """
 
             def func_call_log_probs_along_traj(params, input_batch: SampleBatch):
-                dist_input, _ = functional_call(self.model, params, input_batch)
-                action_dist = self.dist_class(dist_input, self.model)
+                dist_inputs, _ = functional_call(self.model, params, input_batch)
+                action_dist = self.dist_class(dist_inputs, self.model)
                 log_probs = action_dist.logp(input_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
-                return log_probs
+                return log_probs[valid_mask]
 
             dict_params = dict(self.model.named_parameters())
             jac_logp_theta = jacrev(
@@ -291,7 +332,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
                 NOTE 1: pairwise multiplication btw torch tensor and np array, tensor as front!
                 NOTE 2: unlike a3c algorithm, I didnot consider the case of model is recurrent.
                 """
-                agent_pg = torch.sum(jac_logp_theta[param].movedim(0, -1) * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(1, -1), dim=-1)  # (shape_params,)
+                agent_pg = torch.sum(jac_logp_theta[param].movedim(0, -1) * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask].reshape(1, -1), dim=-1)  # (shape_params,)
                 awareness_unsummed = jac_logp_theta[param] * agent_pg  # (Batch, (shape_params, ))
                 awareness += awareness_unsummed.view(awareness_unsummed.shape[0], -1).sum(dim=-1)
 
@@ -316,9 +357,9 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
 
             num_actions = logits.shape[1]
-            jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS].long(), num_classes=num_actions) - torch.softmax(logits, dim=-1)  # (Batch, num_actions)
+            jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS][valid_mask].long(), num_classes=num_actions) - torch.softmax(logits[valid_mask], dim=-1)  # (Batch, num_actions)
 
-            obs = copied_batch[SampleBatch.OBS].detach().cpu().numpy()
+            obs = copied_batch[SampleBatch.OBS][valid_mask].detach().cpu().numpy()
             obs_hash = np.apply_along_axis(
                 lambda arr: hash(arr.data.tobytes()),
                 1,
@@ -327,7 +368,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
             M = (jac_logp_s @ jac_logp_s.T) * torch.from_numpy((obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))).to(jac_logp_s)
 
-            awareness += (M @ copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1, 1)).reshape(-1)
+            awareness += (M @ copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask].reshape(-1, 1)).reshape(-1)
 
         else:
             raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))

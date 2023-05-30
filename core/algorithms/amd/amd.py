@@ -238,7 +238,7 @@ class AMD(A3C):
         policy_map[CENTRAL_PLANNER].appearance = self.appearance
 
         # ! ALL the Pre-learning processing happens here
-        if train_batch.agent_steps() > 0:
+        if train_batch.agent_steps() > 0 and self.config['planner_reward_max'] > 0:
             train_batch = self.prelearning_process_trajectory(train_batch)
         # NOTE: this is the end of my own code
 

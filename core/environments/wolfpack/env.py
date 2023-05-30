@@ -217,7 +217,9 @@ class WolfpackEnv(ParallelEnv):
             'wolf_2': spaces.Discrete(len(WOLFPACK_ACTIONS)),
             'prey': spaces.Discrete(len(WOLFPACK_ACTIONS)),
         }
-        self.state_space = spaces.Box(low=0, high=255, shape=self.state_shape, dtype=np.uint8)
+        # self.state_space = spaces.Box(low=0, high=255, shape=self.state_shape, dtype=np.uint8)
+        # state cannot be normalized by supersuit
+        self.state_space = spaces.Box(low=0.0, high=1.0, shape=self.state_shape, dtype=np.float32)
 
     def seed(self, seed=None):
         if not seed:
@@ -239,7 +241,7 @@ class WolfpackEnv(ParallelEnv):
         return self.observation_spaces[agent]
 
     def state(self) -> np.ndarray:
-        return ascii_array_to_rgb_array(self.env.grid_world(), self.env.ascii_color_array)
+        return ascii_array_to_rgb_array(self.env.grid_world(), self.env.ascii_color_array).astype(np.float32) / 255
 
     def action_space(self, agent):
         return self.action_spaces[agent]
