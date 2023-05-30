@@ -122,3 +122,17 @@ def action_to_reward(
     if zero_sum:
         reward = reward - reward[:, appearance].mean(-1).reshape(-1, 1)
     return reward * availability
+
+
+def cumsum_factor_across_eps(eps_id: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
+
+    if isinstance(eps_id, np.ndarray):
+        _, idx = np.unique(eps_id, return_index=True)
+        idx.sort()
+        unique_eps = eps_id[idx]
+    elif isinstance(eps_id, torch.Tensor):
+        unique_eps = torch.unique_consecutive(eps_id)
+    else:
+        raise NotImplementedError
+
+    return unique_eps.reshape(-1, 1) == eps_id.reshape(1, -1)

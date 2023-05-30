@@ -26,7 +26,7 @@ from ray.rllib.utils.typing import TensorStructType, TensorType
 from torch.func import functional_call, jacrev
 
 from .constants import PreLearningProcessing
-from .utils import action_to_reward, discounted_cumsum_factor_matrix
+from .utils import action_to_reward, cumsum_factor_across_eps
 
 
 class AMDAgent:
@@ -217,12 +217,14 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
             # get the matrix for computing accumulated reward
             # fix: somehow on clusters, discoutned factor matrix is not T x T
-            cp_t = train_batch[SampleBatch.T][valid_mask]
             cp_eps_id = train_batch[SampleBatch.EPS_ID][valid_mask]
-            cumsum_factor_matrix = discounted_cumsum_factor_matrix(eps_id=cp_eps_id, t=cp_t)
-            r_planner_cum = cumsum_factor_matrix @ r_planner
 
-            policy_loss = -torch.mean(train_batch[PreLearningProcessing.AWARENESS][valid_mask] * r_planner_cum) * self.config['agent_pseudo_lr']
+            # we project it onto per episode scale
+            factor_matrix = cumsum_factor_across_eps(cp_eps_id).to(r_planner)
+            r_planner_cum = factor_matrix @ r_planner
+            awareness_cum = factor_matrix @ train_batch[PreLearningProcessing.AWARENESS][valid_mask]
+
+            policy_loss = -torch.mean(awareness_cum * r_planner_cum) * self.config['agent_pseudo_lr']
             reward_cost = ((r_planner**2).sum(-1)**0.5).mean()
 
         model.tower_stats["planner_policy_loss"] = policy_loss

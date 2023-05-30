@@ -21,10 +21,10 @@ from ray.rllib.utils.from_config import NotProvided
 from ray.rllib.utils.metrics import (NUM_AGENT_STEPS_SAMPLED, NUM_ENV_STEPS_SAMPLED, SYNCH_WORKER_WEIGHTS_TIMER)
 from ray.rllib.utils.typing import (EnvCreator, EnvType, MultiAgentPolicyConfigDict, PolicyID, ResultDict, SampleBatchType)
 
-from .action_distribution import TanhTorchDeterministic, SigmoidTorchDeterministic
+from .action_distribution import (SigmoidTorchDeterministic, TanhTorchDeterministic)
 from .callback import AMDDefualtCallback
-from .constants import (CENTRAL_PLANNER, TANH_DETERMINISTIC_DISTRIBUTION, SIGMOID_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
-from .utils import (action_to_reward, discounted_cumsum_factor_matrix, get_availability_mask, get_env_example)
+from .constants import (CENTRAL_PLANNER, SIGMOID_DETERMINISTIC_DISTRIBUTION, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
+from .utils import (action_to_reward, cumsum_factor_across_eps, get_availability_mask, get_env_example)
 from .wrappers import MultiAgentEnvWithCentralPlanner
 
 
@@ -292,9 +292,6 @@ class AMD(A3C):
         cp_t = train_batch[CENTRAL_PLANNER][SampleBatch.T]
         cp_eps_id = train_batch[CENTRAL_PLANNER][SampleBatch.EPS_ID]
 
-        cumsum_factor_matrix = discounted_cumsum_factor_matrix(eps_id=cp_eps_id, t=cp_t)
-        train_batch[CENTRAL_PLANNER][PreLearningProcessing.DISCOUNTED_FACTOR_MATRIX] = cumsum_factor_matrix
-
         # ! STEP 2: get availability
         avail_uf = create_empty_array(self.reward_space_unflattened, batch_size)
         for policy_id in self.config["coop_agent_list"]:
@@ -327,8 +324,13 @@ class AMD(A3C):
         )
         train_batch[CENTRAL_PLANNER][PreLearningProcessing.R_PLANNER] = r_planner  # (T, n_agents)
 
+        factor_matrix = cumsum_factor_across_eps(cp_eps_id)
         # make accumulation: R_{\tau} = \sum_{t=\tau}^{END} r_t
-        r_planner_cum = cumsum_factor_matrix @ r_planner  # (T, n_agents)
+        r_planner_cum = np.repeat(
+            factor_matrix @ r_planner,
+            factor_matrix.sum(axis=-1),
+            axis=0,
+        )  # (T, n_agents)
         # this step is used for checking consistence on sampling and training
         train_batch[CENTRAL_PLANNER][PreLearningProcessing.R_PLANNER_CUM] = r_planner_cum
         r_planner_cum_uf = spaces.unflatten(batch_uf, r_planner_cum.T.flatten())  # this transpose is very important!, each of shape (T, 1)

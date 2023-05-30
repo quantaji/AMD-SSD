@@ -45,9 +45,10 @@ if __name__ == "__main__":
         },
         clip_actions=True,
     ).rollouts(
-        num_rollout_workers=6,
+        # num_rollout_workers=6,
+        num_rollout_workers=0,
         rollout_fragment_length=1024,
-        num_envs_per_worker=4,
+        # num_envs_per_worker=4,
     ).training(
         model={
             "conv_filters": [
@@ -65,7 +66,8 @@ if __name__ == "__main__":
             "lstm_cell_size": 32,
             "max_seq_len": 32,
         },
-        train_batch_size=4 * 6 * 1024,
+        # train_batch_size=4 * 6 * 1024,
+        train_batch_size=128,
         lr=1e-4,
         lr_schedule=[[0, 0.00136], [20000000, 0.000028]],
         gamma=0.99,
@@ -75,8 +77,8 @@ if __name__ == "__main__":
         agent_pseudo_lr=1e-4,
         central_planner_lr=1e-4,
         coop_agent_list=['wolf_1', 'wolf_2'],
-        # planner_reward_max=0.01,
-        planner_reward_max=0.0,
+        planner_reward_max=0.01,
+        # planner_reward_max=0.0,
         reward_distribution='tanh',
         force_zero_sum=False,
         # param_assumption='neural',
