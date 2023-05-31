@@ -40,6 +40,10 @@ class TanhTorchDeterministic(TorchDistributionWrapper):
     def entropy(self) -> TensorType:
         return -torch.ones((self.inputs.size()[0], ), dtype=torch.float32, device=self.inputs.device) * np.inf
 
+    @override(TorchDistributionWrapper)
+    def kl(self, other: ActionDistribution) -> TensorType:
+        return torch.zeros((self.inputs.size()[0], ), dtype=torch.float32, device=self.inputs.device)
+
 
 class SigmoidTorchDeterministic(TorchDistributionWrapper):
     """This distribution stores the deterministic policy, with takes logtis as self.inputs, and gives the tanh value, that contains the full gradient.
@@ -73,3 +77,7 @@ class SigmoidTorchDeterministic(TorchDistributionWrapper):
     @override(TorchDistributionWrapper)
     def entropy(self) -> TensorType:
         return -torch.ones((self.inputs.size()[0], ), dtype=torch.float32, device=self.inputs.device) * np.inf
+
+    @override(TorchDistributionWrapper)
+    def kl(self, other: ActionDistribution) -> TensorType:
+        return torch.zeros((self.inputs.size()[0], ), dtype=torch.float32, device=self.inputs.device)

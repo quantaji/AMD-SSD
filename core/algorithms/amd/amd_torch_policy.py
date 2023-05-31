@@ -59,6 +59,11 @@ class AMDPlanner:
         """Loss for agent"""
         raise NotImplementedError
 
+    def compute_central_planner_actions(self, sample_batch: SampleBatch) -> np.ndarray:
+        """This function computes the r_planner, since we cannot truct on rllib's sample, because they might use exploration config.
+        """
+        raise NotImplementedError
+
 
 class AMDGeneralPolicy(AMDPlanner, AMDAgent, Policy):
 
@@ -93,10 +98,13 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             })
         else:
             return convert_to_numpy({
-                "agent_policy_loss": torch.mean(torch.stack(self.get_tower_stats("agent_policy_loss"))),
-                "agent_value_loss": torch.mean(torch.stack(self.get_tower_stats("agent_value_loss"))),
-                "agent_entropy_loss": torch.mean(torch.stack(self.get_tower_stats("agent_entropy_loss"))),
+                "policy_loss": torch.mean(torch.stack(self.get_tower_stats("policy_loss"))),
+                "vf_loss": torch.mean(torch.stack(self.get_tower_stats("vf_loss"))),
+                "policy_entropy": torch.mean(torch.stack(self.get_tower_stats("policy_entropy"))),
                 "cur_lr": self.cur_lr,
+                "entropy_coeff": self.entropy_coeff,
+                "policy_loss": torch.mean(torch.stack(self.get_tower_stats("policy_loss"))),
+                "amd_loss": torch.mean(torch.stack(self.get_tower_stats("amd_loss"))),
             })
 
     def postprocess_trajectory(
@@ -150,10 +158,10 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
         # the loss contains two parts, first the real rewards, by critit
         # and the second: the reward from central planner
         # # ps: if this agent is not in cooperative list, its r_planner_cum is zero
-        total_advantages = train_batch[Postprocessing.ADVANTAGES][valid_mask] + train_batch[PreLearningProcessing.R_PLANNER_CUM][valid_mask]
 
         # Final policy loss.
-        policy_loss = -torch.mean(log_probs * total_advantages, )
+        policy_loss = -torch.mean(log_probs * train_batch[Postprocessing.ADVANTAGES][valid_mask])
+        amd_loss = -torch.mean(log_probs * train_batch[PreLearningProcessing.R_PLANNER_CUM][valid_mask])
 
         # Compute a value function loss.
         if self.config["use_critic"]:
@@ -168,11 +176,12 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
         # Store values for stats function in model (tower), such that for
         # multi-GPU, we do not override them during the parallel loss phase.
-        model.tower_stats["agent_policy_loss"] = policy_loss
-        model.tower_stats["agent_value_loss"] = value_loss
-        model.tower_stats["agent_entropy_loss"] = entropy
+        model.tower_stats["policy_loss"] = policy_loss
+        model.tower_stats["vf_loss"] = value_loss
+        model.tower_stats["policy_entropy"] = entropy
+        model.tower_stats["amd_loss"] = amd_loss
 
-        total_loss = policy_loss + self.config['vf_loss_coeff'] * value_loss - entropy * self.entropy_coeff
+        total_loss = policy_loss + amd_loss + self.config['vf_loss_coeff'] * value_loss - entropy * self.entropy_coeff
 
         return total_loss
 
@@ -356,19 +365,20 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             """
             assert self.dist_class == TorchCategorical, "Softmax parameterization assumtion assumse tabular case, where action is discrete and therefore, action distribution class is catagorical!"
 
-            logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
+            with torch.no_grad():
+                logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
 
-            num_actions = logits.shape[1]
-            jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS][valid_mask].long(), num_classes=num_actions) - torch.softmax(logits[valid_mask], dim=-1)  # (Batch, num_actions)
+                num_actions = logits.shape[1]
+                jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS][valid_mask].long(), num_classes=num_actions) - torch.softmax(logits[valid_mask], dim=-1)  # (Batch, num_actions)
 
-            obs = copied_batch[SampleBatch.OBS][valid_mask].detach().cpu().numpy()
-            obs_hash = np.apply_along_axis(
-                lambda arr: hash(arr.data.tobytes()),
-                1,
-                obs.reshape(obs.shape[0], -1),
-            )  # this funciton computes the observation's hash
+                obs = copied_batch[SampleBatch.OBS][valid_mask].detach().cpu().numpy()
+                obs_hash = np.apply_along_axis(
+                    lambda arr: hash(arr.data.tobytes()),
+                    1,
+                    obs.reshape(obs.shape[0], -1),
+                )  # this funciton computes the observation's hash
 
-            M = (jac_logp_s @ jac_logp_s.T) * torch.from_numpy((obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))).to(jac_logp_s)
+                M = (jac_logp_s @ jac_logp_s.T) * torch.from_numpy((obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))).to(jac_logp_s)
 
             awareness += (M @ copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask].reshape(-1, 1)).reshape(-1)
 

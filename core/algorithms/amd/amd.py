@@ -77,7 +77,7 @@ class AMDConfig(A3CConfig):
         return self
 
     @override(A3CConfig)
-    def environment(self, **kwargs) -> AlgorithmConfig:
+    def environment(self, **kwargs) -> "AMDConfig":
         """This also computes an env example and if coop_agent_list is not specified, turn is to all agents as coorperative agent"""
         super().environment(**kwargs)
         env_example = get_env_example(self)
@@ -142,6 +142,7 @@ class AMDConfig(A3CConfig):
 
         return self
 
+    @override(A3CConfig)
     def get_multi_agent_setup(
         self,
         *,
