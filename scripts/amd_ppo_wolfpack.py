@@ -53,11 +53,10 @@ if __name__ == "__main__":
         env=env_name,
         env_config=config_template,
     ).rollouts(
-        # num_rollout_workers=n_worker,
-        num_rollout_workers=0,
+        num_rollout_workers=n_worker,
+        # num_rollout_workers=0,
         rollout_fragment_length=length,
-        # rollout_fragment_length=128,
-        # num_envs_per_worker=n_env,
+        num_envs_per_worker=n_env,
     ).training(
         model={
             "conv_filters": [
@@ -76,7 +75,6 @@ if __name__ == "__main__":
             "max_seq_len": 32,
         },
         train_batch_size=n_env * n_worker * length,
-        # train_batch_size=128,
         lr=1e-4,
         lr_schedule=[[0, 0.00136], [20000000, 0.000028]],
         gamma=0.99,
@@ -84,17 +82,19 @@ if __name__ == "__main__":
         entropy_coeff=0.000687,
         vf_loss_coeff=0.5,
         sgd_minibatch_size=n_env * n_worker * length // 4,
-        # sgd_minibatch_size=128,
         num_sgd_iter=10,
         agent_pseudo_lr=1e-4,
         central_planner_lr=1e-4,
         coop_agent_list=['wolf_1', 'wolf_2'],
-        planner_reward_max=0.01,
+        planner_reward_max=0.05,
         # planner_reward_max=0.0,
         reward_distribution='tanh',
         force_zero_sum=False,
         # param_assumption='neural',
         param_assumption='softmax',
+        use_cum_reward=False,
+        pfactor_half_step=2 * (10**6),
+        pfactor_step_scale=5 * (10**5),
     ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=1,
@@ -102,11 +102,11 @@ if __name__ == "__main__":
 
     tune.run(
         AMDPPO,
-        name="AMDPPO-first-try",
+        name="AMDPPO-no-central-planner",
         stop={"timesteps_total": 60 * (10**6)},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
         # local_dir="~/ray_experiment_results/" + env_name,
-        local_dir="~/ray_test/" + env_name,
+        local_dir="~/ray_test_jiligala/" + env_name,
         config=config.to_dict(),
     )

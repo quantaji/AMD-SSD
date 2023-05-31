@@ -66,6 +66,11 @@ class AMDPPOConfig(PPOConfig):
         self.reward_distribution: str = 'sigmoid'
         self.awareness_batch_size: int = None
 
+        # some setting for training large models and algorithm, like PPO
+        self.use_cum_reward = False
+        self.pfactor_half_step = 0
+        self.pfactor_step_scale = 1
+
         ModelCatalog.register_custom_action_dist(TANH_DETERMINISTIC_DISTRIBUTION, TanhTorchDeterministic)
         ModelCatalog.register_custom_action_dist(SIGMOID_DETERMINISTIC_DISTRIBUTION, SigmoidTorchDeterministic)
 
@@ -101,8 +106,17 @@ class AMDPPOConfig(PPOConfig):
         planner_reward_cost: Optional[float] = NotProvided,
         reward_distribution: Optional[str] = NotProvided,
         awareness_batch_size: Optional[int] = NotProvided,
+        use_cum_reward: Optional[bool] = NotProvided,
+        pfactor_half_step: Optional[int] = NotProvided,
+        pfactor_step_scale: Optional[int] = NotProvided,
         **kwargs,
     ) -> "AMDPPOConfig":
+        """
+            use_cum_reward: whether central planner gives reward (True) or gives advantage (False)
+            also, at beginning, we don't want central planner to get envovled so much. we set a sigmoid factor with two parameters to control this
+                pfactor_half_step: 
+                pfactor_step_scale:
+        """
         super().training(**kwargs)
 
         if agent_pseudo_lr is not NotProvided:
@@ -126,6 +140,13 @@ class AMDPPOConfig(PPOConfig):
 
         if awareness_batch_size is not NotProvided:
             self.awareness_batch_size = awareness_batch_size
+
+        if use_cum_reward is not NotProvided:
+            self.use_cum_reward = use_cum_reward
+        if pfactor_half_step is not NotProvided:
+            self.pfactor_half_step = pfactor_half_step
+        if pfactor_step_scale is not NotProvided:
+            self.pfactor_step_scale = pfactor_step_scale
 
         if cp_model is not NotProvided:
             self.cp_model = cp_model
@@ -200,9 +221,6 @@ class AMDPPO(PPO):
             return AMDPPOAgentTorchPolicy
         else:
             raise NotImplementedError("Current algorithm only support PyTorch!")
-
-    def prelearning_process_trajectory(self, train_batch: SampleBatch) -> SampleBatch:
-        return AMD.prelearning_process_trajectory(self, train_batch)
 
     @override(PPO)
     @staticmethod
@@ -319,3 +337,100 @@ class AMDPPO(PPO):
         self.workers.local_worker().set_global_vars(global_vars)
 
         return train_results
+
+    def prelearning_process_trajectory(self, train_batch: SampleBatch) -> SampleBatch:
+
+        # ! STEP 0: useful information
+        batch_size = train_batch[CENTRAL_PLANNER][SampleBatch.ACTIONS].shape[0]
+        batch_uf = batch_space(self.reward_space_unflattened, batch_size)
+        ref_vector = create_empty_array(self.reward_space, batch_size)  # this is a reference vector of shape (T, n_agents)
+        policy_map = self.workers.local_worker().policy_map
+
+        # ! STEP 1: get central planer's t, episode_id, calculate factor matrix
+        cp_t = train_batch[CENTRAL_PLANNER][SampleBatch.T]
+        cp_eps_id = train_batch[CENTRAL_PLANNER][SampleBatch.EPS_ID]
+
+        # ! STEP 2: get availability
+        avail_uf = create_empty_array(self.reward_space_unflattened, batch_size)
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                batch = train_batch[policy_id]
+                # compute availability
+                avail = get_availability_mask(
+                    cp_t=cp_t,
+                    cp_eps_id=cp_eps_id,
+                    ag_t=batch[SampleBatch.T],
+                    ag_eps_id=batch[SampleBatch.EPS_ID],
+                )  # (T, )
+                # modify availability
+                avail_uf[policy_id] = avail.reshape(-1, 1).astype(float)  # (T, 1)
+        availability = spaces.flatten(batch_uf, avail_uf).reshape(ref_vector.T.shape).T.astype(bool)  # (T, n_agents)
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.AVAILABILITY] = availability
+
+        # ! STEP 3: get reward by planner
+        # note that rllib may have exploration configuration, we don't what this to happen to central planner, therefore, we forward central planner again
+        cp_policy = policy_map[CENTRAL_PLANNER]
+        actions = cp_policy.compute_central_planner_actions(train_batch[CENTRAL_PLANNER])
+        train_batch[CENTRAL_PLANNER][SampleBatch.ACTIONS] = actions
+
+        r_planner: np.ndarray = action_to_reward(
+            actions=actions,
+            availability=availability,
+            appearance=self.appearance,
+            reward_max=self.config['planner_reward_max'],
+            zero_sum=self.config['force_zero_sum'],
+        )
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.R_PLANNER] = r_planner  # (T, n_agents)
+
+        # ! options 1: assume the central planner delivers reward, so we have so sum all rewards in an epislode
+        # ! options 2: we can assume the planner delivers advantages
+        if self.config['use_cum_reward']:
+            factor_matrix = cumsum_factor_across_eps(cp_eps_id)
+            # make accumulation: R_{\tau} = \sum_{t=\tau}^{END} r_t
+            r_planner_cum = np.repeat(
+                factor_matrix @ r_planner,
+                factor_matrix.sum(axis=-1),
+                axis=0,
+            )  # (T, n_agents)
+            # this step is used for checking consistence on sampling and training
+        else:
+            r_planner_cum = r_planner
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.R_PLANNER_CUM] = r_planner_cum
+        r_planner_cum_uf = spaces.unflatten(batch_uf, r_planner_cum.T.flatten())  # this transpose is very important!, each of shape (T, 1)
+
+        # distribute accumulated reward to each agent
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                avail = avail_uf[policy_id].reshape(-1).astype(bool)
+                train_batch[policy_id][PreLearningProcessing.R_PLANNER_CUM] = r_planner_cum_uf[policy_id][avail, :].reshape(-1)  # (T, 1)
+
+        # ! STEP 4: calculate the sum of all advantages of cooperative agents
+        total_advantages = np.zeros((batch_size, ))  # placeholder
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                batch = train_batch[policy_id]
+                avail = avail_uf[policy_id].reshape(-1).astype(bool)
+                total_advantages[avail] += batch[Postprocessing.ADVANTAGES]
+
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.TOTAL_ADVANTAGES] = total_advantages
+
+        # then distribute them to all cooperative agents
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                avail = avail_uf[policy_id].reshape(-1).astype(bool)
+                train_batch[policy_id][PreLearningProcessing.TOTAL_ADVANTAGES] = total_advantages[avail]
+
+        # ! STEP 5: computing awareness for each agent
+        awareness_uf = create_empty_array(self.reward_space_unflattened, batch_size)
+        for policy_id in self.config["coop_agent_list"]:
+            if policy_id in policy_map.keys():
+                batch = train_batch[policy_id]
+                batch = policy_map[policy_id].compute_awareness(batch)
+                # aggregate to central planner
+                avail = avail_uf[policy_id].reshape(-1).astype(bool)
+
+                awareness_uf[policy_id][avail, :] = batch[PreLearningProcessing.AWARENESS].reshape(-1, 1)
+        awareness = spaces.flatten(batch_uf, awareness_uf).reshape(ref_vector.T.shape).T  # the transpose is necessary
+        train_batch[CENTRAL_PLANNER][PreLearningProcessing.AWARENESS] = awareness
+
+        return train_batch
