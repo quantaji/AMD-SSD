@@ -112,6 +112,7 @@ class AMDPPOAgentTorchPolicy(
             return convert_to_numpy({
                 "planner_policy_loss": torch.mean(torch.stack(self.get_tower_stats("planner_policy_loss"))),
                 "planner_reward_cost": torch.mean(torch.stack(self.get_tower_stats("planner_reward_cost"))),
+                "planner_reward_std": torch.mean(torch.stack(self.get_tower_stats("planner_reward_std"))),
                 "cur_lr": self.cur_lr,
             })
         else:
@@ -143,6 +144,7 @@ class AMDPPOAgentTorchPolicy(
 
         policy_loss = torch.zeros_like(dist_inputs, requires_grad=True).mean()
         reward_cost = torch.zeros_like(policy_loss, requires_grad=True)
+        reward_std = torch.zeros_like(policy_loss, requires_grad=True)
 
         # only compute loss when reward_max is not zero, for saving computation
         if self.config['planner_reward_max'] > 0.0:
@@ -177,9 +179,11 @@ class AMDPPOAgentTorchPolicy(
 
             policy_loss = -torch.mean(awareness_cum * r_planner_cum) * self.config['agent_pseudo_lr']
             reward_cost = ((r_planner**2).sum(-1)**0.5).mean()
+            reward_std = r_planner.std()
 
         model.tower_stats["planner_policy_loss"] = policy_loss
         model.tower_stats["planner_reward_cost"] = reward_cost
+        model.tower_stats["planner_reward_std"] = reward_std
 
         total_loss = policy_loss + self.config['planner_reward_cost'] * reward_cost
 

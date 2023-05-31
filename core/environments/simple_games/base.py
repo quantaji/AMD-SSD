@@ -62,7 +62,6 @@ class SimpleGameEnv(ParallelEnv):
     def reset(
         self,
         seed: int | None = None,
-        return_info: bool = False,
         options: dict | None = None,
     ) -> ObsDict:
 
@@ -73,10 +72,7 @@ class SimpleGameEnv(ParallelEnv):
         self.time_steps = 0
         self._state = self.initial_state()
 
-        if return_info:
-            return self.observations(), {}
-        else:
-            return self.observations()
+        return self.observations(), dict(zip(self.agents, [{}] * len(self.agents)))
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]

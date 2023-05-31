@@ -86,27 +86,32 @@ if __name__ == "__main__":
         agent_pseudo_lr=1e-4,
         central_planner_lr=1e-4,
         coop_agent_list=['wolf_1', 'wolf_2'],
-        planner_reward_max=0.05,
-        # planner_reward_max=0.0,
+        # planner_reward_max=0.05,
+        planner_reward_max=0.0,
         reward_distribution='tanh',
         force_zero_sum=False,
         # param_assumption='neural',
         param_assumption='softmax',
         use_cum_reward=False,
-        pfactor_half_step=2 * (10**6),
+        pfactor_half_step=2 * (10**6) * 5,
         pfactor_step_scale=5 * (10**5),
-    ).debugging(log_level="ERROR", ).framework(framework="torch", ).resources(
+    ).debugging(
+        log_level="ERROR",
+        seed=114514,
+    ).framework(framework="torch", ).resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=1,
     )
 
     tune.run(
         AMDPPO,
-        name="AMDPPO-no-central-planner",
+        # name="AMDPPO-with-central-planner-r_max=0.05_adv",
+        name="AMDPPO-no-central-planner-retry-1",
         stop={"timesteps_total": 60 * (10**6)},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
         # local_dir="~/ray_experiment_results/" + env_name,
-        local_dir="~/ray_test_jiligala/" + env_name,
+        local_dir="~/ray_test/" + env_name,
         config=config.to_dict(),
+        # resume="LOCAL+ERRORED",
     )

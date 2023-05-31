@@ -370,6 +370,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
 
                 num_actions = logits.shape[1]
                 jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS][valid_mask].long(), num_classes=num_actions) - torch.softmax(logits[valid_mask], dim=-1)  # (Batch, num_actions)
+                jac_logp_s = jac_logp_s.detach().cpu().numpy()
 
                 obs = copied_batch[SampleBatch.OBS][valid_mask].detach().cpu().numpy()
                 obs_hash = np.apply_along_axis(
@@ -378,9 +379,12 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
                     obs.reshape(obs.shape[0], -1),
                 )  # this funciton computes the observation's hash
 
-                M = (jac_logp_s @ jac_logp_s.T) * torch.from_numpy((obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))).to(jac_logp_s)
+                # M = (jac_logp_s @ jac_logp_s.T) * torch.from_numpy((obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))).to(jac_logp_s)
+                # big matrix, we should work on cpu
+                M = (jac_logp_s @ jac_logp_s.T) * (obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))
+                total_adv = copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask].reshape(-1, 1).detach().cpu().numpy()
 
-            awareness += (M @ copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask].reshape(-1, 1)).reshape(-1)
+            awareness = awareness + torch.from_numpy((M @ total_adv).reshape(-1)).to(awareness)
 
         else:
             raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))

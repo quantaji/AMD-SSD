@@ -1,3 +1,10 @@
+# Adaptive Mechanism Design (AMD) in Sequential Social Dilemma (SSD)
+
+This is the code for project of cource Foundations of Reinforcement Learning (FoRL) Spring Semester 2023. The major contributions of this project is
+- A full implementation of AMD algorithm [[original paper]](https://arxiv.org/abs/1806.04067) for arbitrary environments, using `ray==2.3.1`. 
+  - migrating to higher version of `ray` needs additional effort
+- Two RL environments, Wolfpack and Gathering. [[original paper]](https://arxiv.org/abs/1702.03037)
+
 # Instruction for local and Euler environment setup
 I decide to use Python 3.10.4 and CUDA 11.8 as standard version. This is the default version on Euler.
 

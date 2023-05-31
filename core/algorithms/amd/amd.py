@@ -8,6 +8,7 @@ from ray.rllib.algorithms.a3c import A3C, A3CConfig
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.algorithm_config import (AlgorithmConfig, NotProvided, Space)
 from ray.rllib.algorithms.callbacks import DefaultCallbacks, MultiCallbacks
+# from ray.rllib.algorithms.callbacks import make_multi_callbacks
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.evaluation.postprocessing import Postprocessing
 from ray.rllib.execution.rollout_ops import synchronous_parallel_sample
@@ -72,6 +73,7 @@ class AMDConfig(A3CConfig):
             raise ValueError("`config.callbacks_class` must be a callable method that "
                              "returns a subclass of DefaultCallbacks, got "
                              f"{callbacks_class}!")
+        # self.callbacks_class = make_multi_callbacks([AMDDefualtCallback, callbacks_class])
         self.callbacks_class = MultiCallbacks([AMDDefualtCallback, callbacks_class])
 
         return self
