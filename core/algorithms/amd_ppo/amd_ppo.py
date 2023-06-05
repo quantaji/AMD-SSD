@@ -243,6 +243,11 @@ class AMDPPO(PPO):
         self._counters[NUM_AGENT_STEPS_SAMPLED] += train_batch.agent_steps()
         self._counters[NUM_ENV_STEPS_SAMPLED] += train_batch.env_steps()
 
+        # Standardize advantages
+        # NOTE: I am not sure if standardize advange will have some effect on agent!
+        # there are notes saying this will not affect results much, so I will keep it here
+        train_batch = standardize_fields(train_batch, ["advantages"])
+
         # NOTE: this is the start of my own code
         # for conviniency
         worker = self.workers.local_worker()
@@ -255,11 +260,6 @@ class AMDPPO(PPO):
         if train_batch.agent_steps() > 0 and self.config['planner_reward_max'] > 0.0:
             train_batch = self.prelearning_process_trajectory(train_batch)
         # NOTE: this is the end of my own code
-
-        # Standardize advantages
-        # NOTE: I am not sure if standardize advange will have some effect on agent!
-        # there are notes saying this will not affect results much, so I will keep it here
-        # train_batch = standardize_fields(train_batch, ["advantages"])
 
         # Train
         train_results = {}

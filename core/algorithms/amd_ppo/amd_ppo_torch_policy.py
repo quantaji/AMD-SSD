@@ -178,7 +178,7 @@ class AMDPPOAgentTorchPolicy(
                 awareness_cum = train_batch[PreLearningProcessing.AWARENESS][valid_mask]
 
             policy_loss = -torch.mean(awareness_cum * r_planner_cum) * self.config['agent_pseudo_lr']
-            reward_cost = ((r_planner**2).sum(-1)**0.5).mean()
+            reward_cost = ((r_planner**2).mean(-1)**0.5).mean()
             reward_std = r_planner.std()
 
         model.tower_stats["planner_policy_loss"] = policy_loss
@@ -259,7 +259,7 @@ class AMDPPOAgentTorchPolicy(
             total_loss += self.kl_coeff * mean_kl_loss
 
         if self.config["planner_reward_max"] > 0.0:
-            total_loss += reduce_mean_valid(amd_loss)
+            total_loss += self.cur_planner_reward_coeff * reduce_mean_valid(amd_loss)
 
         # Store values for stats function in model (tower), such that for
         # multi-GPU, we do not override them during the parallel loss phase.

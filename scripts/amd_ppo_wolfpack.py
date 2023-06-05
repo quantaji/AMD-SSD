@@ -26,7 +26,7 @@ if __name__ == "__main__":
     os.environ['RLLIB_NUM_GPUS'] = '1'
 
     # real setting
-    n_env = 4
+    n_env = 8
     n_worker = 6
     length = 1024
 
@@ -87,17 +87,19 @@ if __name__ == "__main__":
         central_planner_lr=1e-4,
         coop_agent_list=['wolf_1', 'wolf_2'],
         # planner_reward_max=0.05,
-        planner_reward_max=0.0,
+        planner_reward_max=0.2,
+        # planner_reward_max=0.0,
         reward_distribution='tanh',
         force_zero_sum=False,
         # param_assumption='neural',
         param_assumption='softmax',
         use_cum_reward=False,
-        pfactor_half_step=2 * (10**6) * 5,
+        # use_cum_reward=True,
+        pfactor_half_step=2 * (10**6) * 8,
         pfactor_step_scale=5 * (10**5),
     ).debugging(
         log_level="ERROR",
-        seed=114514,
+        seed=132561,
     ).framework(framework="torch", ).resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=1,
@@ -105,8 +107,8 @@ if __name__ == "__main__":
 
     tune.run(
         AMDPPO,
-        # name="AMDPPO-with-central-planner-r_max=0.05_adv",
-        name="AMDPPO-no-central-planner-retry-1",
+        name="AMDPPO-with-central-planner-r_max=0.2-adv-reward-large-batch-size",
+        # name="AMDPPO-no-central-planner-retry-1",
         stop={"timesteps_total": 60 * (10**6)},
         keep_checkpoints_num=3,
         checkpoint_freq=10,
