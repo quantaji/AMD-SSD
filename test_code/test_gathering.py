@@ -20,19 +20,19 @@ def rgb_onestep(env, action, step_number):
 
 ## seed 1145 for sample imgs in gathering_imgs
 rng, _ = seeding.np_random(189)
-a = Gathering(rng, )
+a = Gathering(rng, tagged_time_number=5, apple_number=10)
 a.render_mode = 'rgb_array'
 a.reset()
 #print(ascii_array_to_str(a.grid_world()))
 img = Image.fromarray(a.render()).save('gathering_small_map1/sample.png')
 
 # np.random.choice(7, size=(len(a.agents),)).tolist()
-a = rgb_onestep(a, (2,5), 1)
-a = rgb_onestep(a, (5,0), 2)
-a = rgb_onestep(a, (0,0), 3)
-a = rgb_onestep(a, (7,0), 4)
-a = rgb_onestep(a, (0,0), 5)
-a = rgb_onestep(a, (0,0), 6)
+a = rgb_onestep(a, (2,0), 1)
+a = rgb_onestep(a, (2,0), 2)
+a = rgb_onestep(a, (2,6), 3)
+a = rgb_onestep(a, (5,0), 4)
+a = rgb_onestep(a, (7,0), 5)
+a = rgb_onestep(a, (4,0), 6)
 a = rgb_onestep(a, (0,0), 7)
 a = rgb_onestep(a, (7,0), 8)
 a = rgb_onestep(a, (2,4), 9)

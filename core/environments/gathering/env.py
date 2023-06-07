@@ -18,7 +18,6 @@ from .constants import (
     GATHERING_AGENT_MAP,
     GATHERING_AGENT_VIEW_TUNE,
     GATHERING_APPLE_NO_ENTRY_STATE,
-    GATHERING_APPLE_NUMBER,
     GATHERING_BEAM_PLAYER_STATE,
     GATHERING_COLOR,
     GATHERING_MAP,
@@ -46,7 +45,7 @@ class Gathering(GridWorldBase):
     line_width = 0
     ## Can try to add more players
     agents = ['blue_p', 'red_p']
-    apple_number = GATHERING_APPLE_NUMBER
+    # apple_number = GATHERING_APPLE_NUMBER
 
     def _baseworld_with_apple(self, base_world):
         ## Call it every time when using base world
@@ -64,12 +63,19 @@ class Gathering(GridWorldBase):
         randomizer: np.random.Generator,
         max_cycles: int = 1024,
         apple_respawn: int = 1,
+        apple_number: int = 3,
+        player_blood: int = 1,
+        tagged_time_number: int = 5,
     ):
         self.agent_dict = {}
         self.apple_dict = {}
 
+        self.apple_number = apple_number
+        self.tagged_time_number = tagged_time_number
+        self.player_blood = player_blood
+
         for agent in self.agents:
-            self.agent_dict[agent] = GatheringAgent(agent)
+            self.agent_dict[agent] = GatheringAgent(agent, tagged_time_number=self.tagged_time_number, player_blood=self.player_blood)
 
         ## in config dict: time for apple respawn
         self.apple_respawn = apple_respawn
@@ -347,13 +353,19 @@ class GatheringEnv(ParallelEnv):
         return self.env.render()
 
 
-def gathring_env_creator(config: Dict[str, Any] = {
+def gathering_env_creator(config: Dict[str, Any] = {
     'max_cycles': 1240,
     'apple_respawn': 3,
+    'apple_number': 3,
+    'player_blood': 1,
+    'tagged_time_number': 5,
 }) -> GatheringEnv:
     env = GatheringEnv(
         max_cycles=config['max_cycles'],
         apple_respawn=config['apple_respawn'],
+        apple_number=config['apple_number'],
+        player_blood=config['player_blood'],
+        tagged_time_number=config['tagged_time_number'],
     )
     env.convert_to_rllib_env = True
     return env
@@ -362,4 +374,7 @@ def gathring_env_creator(config: Dict[str, Any] = {
 gathering_env_default_config: Dict[str, Any] = {
     'max_cycles': 1240,
     'apple_respawn': 3,
+    'apple_number': 3,
+    'player_blood': 1,
+    'tagged_time_number': 5,
 }
