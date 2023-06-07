@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-#SBATCH --job-name="forl-proj"
+#SBATCH --job-name="ppo_with_starv"
 #SBATCH --output=%j.out
 #SBATCH --time=10:00:00
 

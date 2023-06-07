@@ -66,6 +66,7 @@ class Gathering(GridWorldBase):
         apple_number: int = 3,
         player_blood: int = 1,
         tagged_time_number: int = 5,
+        r_starv: float = -0.01,
     ):
         self.agent_dict = {}
         self.apple_dict = {}
@@ -73,6 +74,7 @@ class Gathering(GridWorldBase):
         self.apple_number = apple_number
         self.tagged_time_number = tagged_time_number
         self.player_blood = player_blood
+        self.r_starv = r_starv
 
         for agent in self.agents:
             self.agent_dict[agent] = GatheringAgent(agent, tagged_time_number=self.tagged_time_number, player_blood=self.player_blood)
@@ -253,10 +255,14 @@ class Gathering(GridWorldBase):
         self.num_frames += 1
 
         # test termination and calc reward
+        # MOD: reward is just reward at this time
         for agent_key, agent in self.agent_dict.items():
             posi = agent.position
             if grid_world[posi[0], posi[1]] == 'C':
-                self.rewards[agent_key] = agent.apple_eaten
+                #self.rewards[agent_key] = agent.apple_eaten
+                self.rewards[agent_key] = 1
+            else:
+                self.rewards[agent_key] = self.r_starv
         if self.num_frames >= self.max_cycles:
             self.truncations = dict(zip(self.agents, [True] * len(self.agents)))
 
@@ -359,6 +365,7 @@ def gathering_env_creator(config: Dict[str, Any] = {
     'apple_number': 3,
     'player_blood': 1,
     'tagged_time_number': 5,
+    'r_starv': -0.01,
 }) -> GatheringEnv:
     env = GatheringEnv(
         max_cycles=config['max_cycles'],
@@ -366,15 +373,17 @@ def gathering_env_creator(config: Dict[str, Any] = {
         apple_number=config['apple_number'],
         player_blood=config['player_blood'],
         tagged_time_number=config['tagged_time_number'],
+        r_starv=config['r_starv'],
     )
     env.convert_to_rllib_env = True
     return env
 
 
 gathering_env_default_config: Dict[str, Any] = {
-    'max_cycles': 1240,
+    'max_cycles': 1024,
     'apple_respawn': 3,
     'apple_number': 3,
     'player_blood': 1,
     'tagged_time_number': 5,
+    'r_starv': -0.01,
 }

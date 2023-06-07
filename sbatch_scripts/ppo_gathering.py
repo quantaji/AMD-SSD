@@ -55,6 +55,7 @@ if __name__ == "__main__":
         'player_blood': 1,
         'tagged_time_number': 5,
         'max_cycles': 1024,
+        'r_starv': -0.01,
     }
 
     register_env(env_name, lambda config: ParallelPettingZooEnv(gathering_env_creator(config)))
