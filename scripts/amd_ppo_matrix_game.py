@@ -19,7 +19,7 @@ if module_path not in sys.path:
 # from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd_ppo import AMDPPO, AMDPPOConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
-from core.environments.simple_games.matrix_game import matrix_game_env_creator
+from core.environments.simple_games.matrix_game import matrix_game_env_creator, coop_stats_fn
 
 if __name__ == "__main__":
     ray.init()
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         lr=1e-2,
         agent_pseudo_lr=1e-2,
         central_planner_lr=1e-2,
-        planner_reward_cost=25.0,
+        planner_reward_cost=0.0,
         gamma=0.99,
         reward_distribution='tanh',
         planner_reward_max=3.0,
@@ -67,6 +67,7 @@ if __name__ == "__main__":
         force_zero_sum=False,
         # param_assumption='softmax',
         param_assumption='neural',
+        agent_cooperativeness_stats_fn=coop_stats_fn,
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,

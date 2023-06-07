@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union)
+import importlib
 
 import numpy as np
 from gymnasium import spaces
@@ -65,6 +66,7 @@ class AMDPPOConfig(PPOConfig):
         self.planner_reward_cost: float = 0.0
         self.reward_distribution: str = 'sigmoid'
         self.awareness_batch_size: int = None
+        self.agent_cooperativeness_stats_fn: Callable = None
 
         # some setting for training large models and algorithm, like PPO
         self.use_cum_reward = False
@@ -109,6 +111,7 @@ class AMDPPOConfig(PPOConfig):
         use_cum_reward: Optional[bool] = NotProvided,
         pfactor_half_step: Optional[int] = NotProvided,
         pfactor_step_scale: Optional[int] = NotProvided,
+        agent_cooperativeness_stats_fn: Optional[Union[str, Callable]] = NotProvided,
         **kwargs,
     ) -> "AMDPPOConfig":
         """
@@ -116,6 +119,7 @@ class AMDPPOConfig(PPOConfig):
             also, at beginning, we don't want central planner to get envovled so much. we set a sigmoid factor with two parameters to control this
                 pfactor_half_step: 
                 pfactor_step_scale:
+            agent_cooperativeness_stats_fn: a function that takes sample batch, and give a stats about the coorperativeness of current batch
         """
         super().training(**kwargs)
 
@@ -150,6 +154,15 @@ class AMDPPOConfig(PPOConfig):
 
         if cp_model is not NotProvided:
             self.cp_model = cp_model
+
+        if agent_cooperativeness_stats_fn is not NotProvided:
+            if isinstance(agent_cooperativeness_stats_fn, str):
+                try:
+                    self.agent_cooperativeness_stats_fn = importlib.import_module(agent_cooperativeness_stats_fn)
+                except:
+                    self.agent_cooperativeness_stats_fn = None
+            elif callable(agent_cooperativeness_stats_fn):
+                self.agent_cooperativeness_stats_fn = agent_cooperativeness_stats_fn
 
         return self
 
@@ -364,6 +377,8 @@ class AMDPPO(PPO):
                 )  # (T, )
                 # modify availability
                 avail_uf[policy_id] = avail.reshape(-1, 1).astype(float)  # (T, 1)
+                batch[PreLearningProcessing.AVAILABILITY] = avail
+
         availability = spaces.flatten(batch_uf, avail_uf).reshape(ref_vector.T.shape).T.astype(bool)  # (T, n_agents)
         train_batch[CENTRAL_PLANNER][PreLearningProcessing.AVAILABILITY] = availability
 

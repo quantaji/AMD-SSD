@@ -116,6 +116,12 @@ class AMDPPOAgentTorchPolicy(
                 "cur_lr": self.cur_lr,
             })
         else:
+            # get a stats on the cooperativeness of current batch
+            coop_stats_fn = self.config['agent_cooperativeness_stats_fn']
+            cooperativeness = 0.0
+            if coop_stats_fn:
+                cooperativeness = coop_stats_fn(train_batch)
+
             return convert_to_numpy({
                 "cur_kl_coeff": self.kl_coeff,
                 "cur_lr": self.cur_lr,
@@ -128,6 +134,7 @@ class AMDPPOAgentTorchPolicy(
                 "entropy_coeff": self.entropy_coeff,
                 "amd_loss": torch.mean(torch.stack(self.get_tower_stats("amd_loss"))),
                 "planner_reward_coeff": self.cur_planner_reward_coeff,
+                "cooperativeness": cooperativeness,
             })
 
     def loss_central_planner(self, model: ModelV2, dist_class: ActionDistribution, train_batch: SampleBatch) -> TensorType | List[TensorType]:

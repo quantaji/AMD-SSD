@@ -4,25 +4,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pygame
+import torch
 from gymnasium import spaces
 from gymnasium.utils import seeding
 from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
+from ray.rllib.policy.sample_batch import SampleBatch
 
+from ...algorithms.amd.constants import PreLearningProcessing
 from ..base.gridworld import GridWorldBase
 from ..utils import (ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array)
 from .agent import WolfpackAgent
-from .constants import (
-    WOLFPACK_ACTIONS,
-    WOLFPACK_AGENT_MAP,
-    WOLFPACK_AGENT_VIEW_TUNE,
-    WOLFPACK_COLOR,
-    WOLFPACK_MAP,
-    WOLFPACK_NO_ENTRY_STATE,
-    WOLFPACK_OBSERVATION_SHAPE,
-    WOLFPACK_ORIENTATION_BOUNDING_BOX,
-    WOLFPACK_ORIENTATION_TUNE,
-    WOLFPACK_STATE_SHAPE,
-)
+from .constants import (WOLFPACK_ACTIONS, WOLFPACK_AGENT_MAP, WOLFPACK_AGENT_VIEW_TUNE, WOLFPACK_COLOR, WOLFPACK_MAP, WOLFPACK_NO_ENTRY_STATE, WOLFPACK_OBSERVATION_SHAPE, WOLFPACK_ORIENTATION_BOUNDING_BOX, WOLFPACK_ORIENTATION_TUNE, WOLFPACK_STATE_SHAPE)
 
 
 class Wolfpack(GridWorldBase):
@@ -296,3 +288,16 @@ wolfpack_env_default_config: Dict[str, Any] = {
     'coop_radius': 6,
     'max_cycles': 1024,
 }
+
+
+def wolfpack_coop_stats_fn(sample_batch: SampleBatch, coop_reward: float) -> float:
+    rewards = sample_batch[SampleBatch.REWARDS]
+    if isinstance(rewards, torch.Tensor):
+        rewards = rewards.detach().cpu().numpy()
+
+    eps_id = sample_batch[SampleBatch.EPS_ID]
+    if isinstance(eps_id, torch.Tensor):
+        eps_id = eps_id.detach().cpu().numpy()
+    unq_eps_id = np.unique(eps_id)
+
+    return (rewards + 1e-8 >= coop_reward).sum() / len(unq_eps_id)

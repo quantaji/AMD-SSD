@@ -5,12 +5,15 @@ from typing import (Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVa
 
 import numpy as np
 import pygame
+import torch
 from gymnasium import spaces
 from gymnasium.utils import seeding
 from pettingzoo.utils.env import (ActionDict, ActionType, AgentID, ObsDict, ObsType, ParallelEnv)
+from ray.rllib.policy.sample_batch import SampleBatch
 
 from core.environments.utils import (ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array)
 
+from ...algorithms.amd.constants import PreLearningProcessing
 from ..base.gridworld import GridWorldBase
 from .agent import GatheringAgent, GatheringApple
 from .constants import (
@@ -363,3 +366,11 @@ gathering_env_default_config: Dict[str, Any] = {
     'max_cycles': 1240,
     'apple_respawn': 3,
 }
+
+
+def gathering_coop_stats_fn(sample_batch: SampleBatch, coop_reward: float) -> float:
+    avail = sample_batch[PreLearningProcessing.AVAILABILITY]
+    if isinstance(avail, torch.Tensor):
+        avail = avail.detach().cpu().numpy()
+
+    return avail.mean()

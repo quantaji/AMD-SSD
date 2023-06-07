@@ -16,7 +16,7 @@ if module_path not in sys.path:
 
 from core.algorithms.amd.wrappers import \
     MultiAgentEnvFromPettingZooParallel as P2M
-from core.environments.wolfpack import wolfpack_env_creator
+from core.environments.wolfpack import wolfpack_env_creator, wolfpack_coop_stats_fn
 from core.algorithms.amd_ppo import AMDPPO, AMDPPOConfig
 
 if __name__ == "__main__":
@@ -25,15 +25,17 @@ if __name__ == "__main__":
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
 
-    # real setting
-    n_env = 8
-    n_worker = 6
+    # # real setting
+    # n_env = 8
+    # n_worker = 6
+    # length = 1024
+
+    # test setting
+    n_env = 1
+    n_worker = 0
     length = 1024
 
-    # # test setting
-    # n_env = 1
-    # n_worker = 1
-    # length = 128
+    batch_size = n_env * max(1, n_worker) * length
 
     env_name = 'wolfpack'
     config_template = {
@@ -74,14 +76,14 @@ if __name__ == "__main__":
             "lstm_cell_size": 32,
             "max_seq_len": 32,
         },
-        train_batch_size=n_env * n_worker * length,
+        train_batch_size=batch_size,
         lr=1e-4,
         lr_schedule=[[0, 0.00136], [20000000, 0.000028]],
         gamma=0.99,
         lambda_=0.95,
         entropy_coeff=0.000687,
         vf_loss_coeff=0.5,
-        sgd_minibatch_size=n_env * n_worker * length // 4,
+        sgd_minibatch_size=batch_size // 4,
         num_sgd_iter=10,
         agent_pseudo_lr=1e-4,
         central_planner_lr=1e-4,
@@ -97,6 +99,10 @@ if __name__ == "__main__":
         # use_cum_reward=True,
         pfactor_half_step=2 * (10**6) * 8,
         pfactor_step_scale=5 * (10**5),
+        agent_cooperativeness_stats_fn=lambda sample_batch: wolfpack_coop_stats_fn(
+            sample_batch=sample_batch,
+            coop_reward=config_template['r_team'],
+        ),
     ).debugging(
         log_level="ERROR",
         seed=132561,
@@ -113,7 +119,8 @@ if __name__ == "__main__":
         keep_checkpoints_num=3,
         checkpoint_freq=10,
         # local_dir="~/ray_experiment_results/" + env_name,
-        local_dir="~/ray_test/" + env_name,
+        # local_dir="~/ray_test/" + env_name,
+        local_dir="~/ray_debug/" + env_name,
         config=config.to_dict(),
         # resume="LOCAL+ERRORED",
     )

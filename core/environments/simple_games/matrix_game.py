@@ -2,11 +2,14 @@ from abc import ABC
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import torch
 from gymnasium import spaces
 from gymnasium.utils import seeding
 from gymnasium.vector.utils import create_empty_array
 from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
+from ray.rllib.policy.sample_batch import SampleBatch
 
+from ...algorithms.amd.constants import PreLearningProcessing
 from .base import SimpleGameEnv
 
 
@@ -75,3 +78,11 @@ def matrix_game_env_creator(config: Dict[str, Any] = {
         greed=config['greed'],
     )
     return env
+
+
+def coop_stats_fn(sample_batch: SampleBatch) -> float:
+    actions = sample_batch[SampleBatch.ACTIONS]
+    if isinstance(actions, torch.Tensor):
+        actions = actions.detach().cpu().numpy()
+
+    return (actions == 1).mean()
