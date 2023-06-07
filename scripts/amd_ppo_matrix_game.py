@@ -67,6 +67,8 @@ if __name__ == "__main__":
         force_zero_sum=False,
         # param_assumption='softmax',
         param_assumption='neural',
+        neural_awareness_method='grad',
+        awareness_batch_size=32,
         agent_cooperativeness_stats_fn=coop_stats_fn,
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),

@@ -136,3 +136,20 @@ def cumsum_factor_across_eps(eps_id: np.ndarray | torch.Tensor) -> np.ndarray | 
         raise NotImplementedError
 
     return unique_eps.reshape(-1, 1) == eps_id.reshape(1, -1)
+
+
+def chunk_batch_to_batch(eps_id: np.ndarray, batch_size: int):
+    """
+    Given the episode id of a batch, chunks the batch into several pieces, each pieces have integrate episodes, (so that RNN forwarding is correct), and each pieces is no larger than batch size. You have to guarantee that batch_size is larger than the maximum length of possible episodes.
+    """
+    _, idx, inv, count = np.unique(eps_id, return_index=True, return_inverse=True, return_counts=True)
+    idx.sort()
+    eps_length = count[inv[idx]]
+    batch_length = [0, 0]
+    for l in eps_length:
+        if batch_length[-1] + l <= batch_size:
+            batch_length[-1] += l
+        else:
+            batch_length.append(l)
+
+    return np.cumsum(np.array(batch_length)).tolist()

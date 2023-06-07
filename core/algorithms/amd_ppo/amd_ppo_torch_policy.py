@@ -27,11 +27,12 @@ from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.torch_utils import (apply_grad_clipping, explained_variance, sequence_mask, warn_if_infinite_kl_divergence)
 from ray.rllib.utils.typing import AgentID, TensorStructType, TensorType
+from torch.autograd import grad
 from torch.func import functional_call, jacrev
 
 from ..amd.amd_torch_policy import AMDAgentTorchPolicy, AMDGeneralPolicy
 from ..amd.constants import PreLearningProcessing
-from ..amd.utils import action_to_reward, cumsum_factor_across_eps
+from ..amd.utils import (action_to_reward, chunk_batch_to_batch, cumsum_factor_across_eps)
 
 torch, nn = try_import_torch()
 
@@ -102,9 +103,6 @@ class AMDPPOAgentTorchPolicy(
 
     def compute_central_planner_actions(self, sample_batch: SampleBatch) -> ndarray:
         return AMDAgentTorchPolicy.compute_central_planner_actions(self, sample_batch)
-
-    def compute_awareness(self, sample_batch: SampleBatch):
-        return AMDAgentTorchPolicy.compute_awareness(self, sample_batch)
 
     @override(TorchPolicyV2)
     def stats_fn(self, train_batch: SampleBatch) -> Dict[str, TensorType]:
@@ -283,3 +281,214 @@ class AMDPPOAgentTorchPolicy(
     @override(TorchPolicyV2)
     def extra_grad_process(self, local_optimizer, loss):
         return apply_grad_clipping(self, local_optimizer, loss)
+
+    def compute_awareness(self, sample_batch: SampleBatch) -> SampleBatch:
+        """This funciton compute the 'awareness' of an agent.
+
+            The awareness is a intermediate value used in total value function approximation. In the policy gradient approximation, 
+                V_j = Prod_{i,t} pi_i(t) x R_j.
+            and the gradient is 
+                nabla_i V_j = (sum_t nabla_i log pi_i(t)) x R_j.
+            and policy gradient theorem, we can replace R_j with advantage function
+                nabla_i V_j = sum_t ( (nabla_i log pi_i(t)) x delta_{j, t} )
+            Then the total value function's gradient is
+                nabla_i V = sum_t ( (nabla_i log pi_i(t)) x (sum_j delta_{j, t}) )
+            The AWARENESS is defined as
+                a_{t,i} = (nabla_i V)^T x (nabla_i log pi_i(t))
+                        = sum_t' ( (nabla_i log pi_i(t')) x (sum_j delta_{j, t'}) )^T x (nabla_i log pi_i(t))
+            The awareness is used for latter update of central planner
+                Delta theta_p = sum_{i, t} a_{t, i} x nabla_p R^p_{t, i}
+            where R^p_{t,i} is the accumlated total reward.
+        """
+        # planner_reward_max means no planner's reward, so we skip this for faster computation
+        if self.is_central_planner or self.config['planner_reward_max'] == 0.0:
+            return sample_batch
+
+        awareness = None
+
+        if not self.config['awareness_batch_size']:
+            batch_slices = [sample_batch]
+        else:
+            slice_chunk = chunk_batch_to_batch(
+                eps_id=sample_batch[SampleBatch.EPS_ID],
+                batch_size=self.config['awareness_batch_size'],
+            )
+            batch_slices = [sample_batch.slice(slice_chunk[i], slice_chunk[i + 1]) for i in range(len(slice_chunk) - 1)]
+
+        def get_copied_batch_and_mask(train_batch: SampleBatch):
+            # get ready for calculating awareness
+            copied_batch = train_batch.copy(shallow=False)
+            if not copied_batch.zero_padded:
+                pad_batch_to_sequences_of_same_size(
+                    batch=copied_batch,
+                    max_seq_len=self.max_seq_len,
+                    shuffle=False,
+                    batch_divisibility_req=self.batch_divisibility_req,
+                    view_requirements=self.view_requirements,
+                )
+            copied_batch = self._lazy_tensor_dict(copied_batch)  # this also convert batch to device
+
+            if self.is_recurrent():
+                B = len(copied_batch[SampleBatch.SEQ_LENS])
+                max_seq_len = copied_batch[SampleBatch.REWARDS].shape[0] // B
+                mask_orig = sequence_mask(copied_batch[SampleBatch.SEQ_LENS], max_seq_len)
+                valid_mask = torch.reshape(mask_orig, [-1])
+            else:
+                valid_mask = torch.ones_like(copied_batch[SampleBatch.REWARDS], dtype=torch.bool)
+
+            return copied_batch, valid_mask
+
+        if self.config['param_assumption'] == 'neural':
+            """
+            Agents do policy gradient with assumtion of neural network parameterization
+            """
+            awareness = []
+
+            # I have tested, grad takes less VRAM
+            if self.config['neural_awareness_method'] == 'jacobian':
+                """
+                Use torch.func.jacrev to calculate awarenss
+                """
+                dict_params = {k: v.detach() for k, v in self.model.named_parameters()}
+                policy_gradient = {k: np.zeros(v.shape) for k, v in dict_params.items()}
+
+                # first loop for calculation of gradient
+                for batch in batch_slices:
+                    copied_batch, valid_mask = get_copied_batch_and_mask(batch)
+
+                    def func_cal_policy_loss(params):
+                        dist_inputs, _ = functional_call(self.model, params, copied_batch)
+                        action_dist = self.dist_class(dist_inputs, self.model)
+                        log_probs = action_dist.logp(copied_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
+                        return torch.sum(log_probs[valid_mask] * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask])
+
+                    batch_pg = jacrev(func_cal_policy_loss)(dict_params)
+
+                    with torch.no_grad():
+                        for k, pg_params in batch_pg.items():
+                            policy_gradient[k] += pg_params.detach().cpu().numpy()
+
+                # second loop for calculating awarenss
+                for batch in batch_slices:
+                    batch_awareness = np.zeros_like(batch[SampleBatch.REWARDS], dtype=np.float).reshape(-1)
+                    batch_size = batch_awareness.shape[0]
+
+                    copied_batch, valid_mask = get_copied_batch_and_mask(batch)
+
+                    def func_cal_log_prob(params):
+                        dist_inputs, _ = functional_call(self.model, params, copied_batch)
+                        action_dist = self.dist_class(dist_inputs, self.model)
+                        log_probs = action_dist.logp(copied_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
+                        return log_probs[valid_mask]
+
+                    batch_log_prob = jacrev(func_cal_log_prob)(dict_params)
+                    with torch.no_grad():
+                        for k, logp_params in batch_log_prob.items():
+                            # log_params is of shape (batch, (shape_params))
+                            batch_awareness += (logp_params.detach().cpu().numpy() * policy_gradient[k]).reshape(batch_size, -1).sum(-1)
+
+                    awareness.append(batch_awareness)
+
+                awareness = np.hstack(awareness)
+
+            elif self.config['neural_awareness_method'] == 'grad':
+                """
+                    Use torch.autograd.grad to calculate, needs more memory because have to create graph
+                """
+                policy_gradient = [torch.zeros_like(p) for p in self.model.parameters()]
+
+                self.model.train()
+                for batch in batch_slices:
+                    copied_batch, valid_mask = get_copied_batch_and_mask(batch)
+                    dist_inputs, _ = self.model(copied_batch)
+                    action_dist = self.dist_class(dist_inputs, self.model)
+                    log_probs = action_dist.logp(copied_batch[SampleBatch.ACTIONS]).reshape(-1)  # shape (Batch, )
+                    policy_loss = torch.sum(log_probs[valid_mask] * copied_batch[PreLearningProcessing.TOTAL_ADVANTAGES][valid_mask])
+
+                    batch_pg = grad(policy_loss, self.model.parameters(), allow_unused=True)
+
+                    for i, pg_params in enumerate(policy_gradient):
+                        if batch_pg[i] is not None:
+                            pg_params += batch_pg[i]
+
+                for batch in batch_slices:
+                    batch_awareness = np.zeros_like(batch[SampleBatch.REWARDS], dtype=np.float).reshape(-1)
+                    batch_size = batch_awareness.shape[0]
+
+                    copied_batch, valid_mask = get_copied_batch_and_mask(batch)
+                    with torch.backends.cudnn.flags(enabled=False):
+                        # because cudnn does not have second derivative of rnns
+                        dist_inputs, _ = self.model(copied_batch)
+                    action_dist = self.dist_class(dist_inputs, self.model)
+                    log_probs = action_dist.logp(copied_batch[SampleBatch.ACTIONS]).reshape(-1)[valid_mask]  # shape (Batch, )
+                    ones = torch.ones_like(log_probs, requires_grad=True)
+
+                    logp_sum = grad(log_probs, self.model.parameters(), ones, create_graph=True, allow_unused=True)
+
+                    for i, pg_params in enumerate(policy_gradient):
+                        if logp_sum[i] is not None:
+                            batch_awareness += grad(
+                                (pg_params * logp_sum[i]).sum(),
+                                ones,
+                                retain_graph=True,
+                            )[0].detach().cpu().numpy()
+
+                    awareness.append(batch_awareness)
+
+                awareness = np.hstack(awareness)
+
+            else:
+                raise NotImplementedError
+
+        elif self.config['param_assumption'] == 'softmax':
+            """
+            Agents do policy gradient with assumtion of softmax parameterizization. In this case:
+                p(a, s) = softmax(theta(a', s)) (a)
+                paital{logp(a, s)}{theta(a', s')} = 1{s=s', a=a'} - pi(a', s)1{s=s'}
+            NOTE: 'softmax' option natually assumes a multinomial distribution, so the model's output is assumed to be the logits.
+            NOTE: Determining state is equal or not is difficult. Therefore, I use hash function over observation.
+            Derivation:
+                awareness(tau) := (sum_t nabla_theta logpi(a_t, s_t) * delta_t) ^T nabla_theta logpi(a_tau, s_tau)
+                = sum_{t, a', s'} delta_t x 1{s_t = s'} x (1{a_t = a'} - pi(a', s_t)) x 1{s_tau = s'} x (1{a_tau = a'} - pi(a', s_tau))
+            We define j_t = 1{a_t = a'} - pi(a', s_t) in R^{|A|} as a vector of dimension of actiona space, then
+                awareness(tau) = sum_{t, s'} delta_t x 1{s_t = s'} x 1{s_tau = s'} x (j_t ^T j_tau)
+                =  sum_{t} delta_t x 1{s_t = s_tau} x (j_t ^T j_tau)
+                = M x delta
+            M_{i,j} := 1{s_i = s_j} x (j_i ^T j_j) as a TxT matrix, and delta = [delta_t] is a Tx1 matrix
+            """
+            assert self.dist_class == TorchCategorical, "Softmax parameterization assumtion assumse tabular case, where action is discrete and therefore, action distribution class is catagorical!"
+
+            jac_logp_s = []
+
+            with torch.no_grad():
+                for batch in batch_slices:
+                    copied_batch, valid_mask = get_copied_batch_and_mask(batch)
+
+                    logits, _ = self.model(copied_batch)  # shape is (Batch, num_actions)
+                    num_actions = logits.shape[1]
+
+                    batch_jac_logp_s = torch.nn.functional.one_hot(copied_batch[SampleBatch.ACTIONS][valid_mask].long(), num_classes=num_actions) - torch.softmax(logits[valid_mask], dim=-1)  # (Batch, num_actions)
+                    batch_jac_logp_s = batch_jac_logp_s.detach().cpu().numpy()
+
+                    jac_logp_s.append(batch_jac_logp_s)
+
+            jac_logp_s = np.concatenate(jac_logp_s)
+
+            obs = sample_batch[SampleBatch.OBS]
+            obs_hash = np.apply_along_axis(
+                lambda arr: hash(arr.data.tobytes()),
+                1,
+                obs.reshape(obs.shape[0], -1),
+            )  # this funciton computes the observation's hash
+
+            # big matrix, we should work on cpu
+            M = (jac_logp_s @ jac_logp_s.T) * (obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))
+            total_adv = sample_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1, 1)
+            awareness = (M @ total_adv).reshape(-1)
+
+        else:
+            raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))
+
+        sample_batch[PreLearningProcessing.AWARENESS] = awareness
+
+        return sample_batch

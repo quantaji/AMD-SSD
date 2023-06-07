@@ -25,15 +25,16 @@ if __name__ == "__main__":
     # to use gpu
     os.environ['RLLIB_NUM_GPUS'] = '1'
 
-    # # real setting
-    # n_env = 8
-    # n_worker = 6
-    # length = 1024
-
-    # test setting
-    n_env = 1
-    n_worker = 0
+    # real setting
+    # this setting is ok for option neural, but for softmax, it takes all memory
+    n_env = 16 
+    n_worker = 6
     length = 1024
+
+    # # test setting
+    # n_env = 1
+    # n_worker = 0
+    # length = 512
 
     batch_size = n_env * max(1, n_worker) * length
 
@@ -69,6 +70,14 @@ if __name__ == "__main__":
             "lstm_cell_size": 128,
             "max_seq_len": 32,
         },
+        # model={
+        #     "conv_filters": [  # 16x21x3
+        #         [16, [4, 4], 2],  # 7x9x16
+        #         [32, [4, 4], 2],  # 2x3x32
+        #         [256, [4, 6], 1],
+        #     ],
+        #     'fcnet_hiddens': [32, 32],
+        # },
         cp_model={
             'fcnet_hiddens': [256, 128],
             'fcnet_activation': 'relu',
@@ -94,6 +103,8 @@ if __name__ == "__main__":
         reward_distribution='tanh',
         force_zero_sum=False,
         # param_assumption='neural',
+        awareness_batch_size=1024,
+        # neural_awareness_method='grad',
         param_assumption='softmax',
         use_cum_reward=False,
         # use_cum_reward=True,

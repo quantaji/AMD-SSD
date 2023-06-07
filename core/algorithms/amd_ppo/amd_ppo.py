@@ -67,6 +67,7 @@ class AMDPPOConfig(PPOConfig):
         self.reward_distribution: str = 'sigmoid'
         self.awareness_batch_size: int = None
         self.agent_cooperativeness_stats_fn: Callable = None
+        self.neural_awareness_method: str = 'grad'
 
         # some setting for training large models and algorithm, like PPO
         self.use_cum_reward = False
@@ -112,6 +113,7 @@ class AMDPPOConfig(PPOConfig):
         pfactor_half_step: Optional[int] = NotProvided,
         pfactor_step_scale: Optional[int] = NotProvided,
         agent_cooperativeness_stats_fn: Optional[Union[str, Callable]] = NotProvided,
+        neural_awareness_method: Optional[str] = NotProvided,
         **kwargs,
     ) -> "AMDPPOConfig":
         """
@@ -120,6 +122,7 @@ class AMDPPOConfig(PPOConfig):
                 pfactor_half_step: 
                 pfactor_step_scale:
             agent_cooperativeness_stats_fn: a function that takes sample batch, and give a stats about the coorperativeness of current batch
+            neural_awareness_method: method for calculation of awareness, 'jacboian' is the default method using torch.func.functional_call and torch.func.jacrev. For LSTM, there is bug in current pytorch, therefore, we offer another option 'grad' using torch.autograd.grad, which is might be slow
         """
         super().training(**kwargs)
 
@@ -163,6 +166,10 @@ class AMDPPOConfig(PPOConfig):
                     self.agent_cooperativeness_stats_fn = None
             elif callable(agent_cooperativeness_stats_fn):
                 self.agent_cooperativeness_stats_fn = agent_cooperativeness_stats_fn
+
+        if neural_awareness_method is not NotProvided:
+            assert neural_awareness_method in ['jacobian', 'grad']
+            self.neural_awareness_method = neural_awareness_method
 
         return self
 
