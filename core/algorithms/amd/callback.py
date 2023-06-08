@@ -2,8 +2,6 @@ import numpy as np
 from gymnasium import spaces
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
-from ray.rllib.evaluation import RolloutWorker
-from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.typing import PolicyID
 

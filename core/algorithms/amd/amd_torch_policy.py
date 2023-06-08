@@ -1,7 +1,7 @@
 """
 PyTorch policy class used for AMD.
 """
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import torch
@@ -10,7 +10,7 @@ from gymnasium import spaces
 from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
 from ray.rllib.evaluation import Episode
 from ray.rllib.evaluation.episode import Episode
-from ray.rllib.evaluation.postprocessing import (Postprocessing, compute_gae_for_sample_batch)
+from ray.rllib.evaluation.postprocessing import Postprocessing, compute_gae_for_sample_batch
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch import torch_modelv2
@@ -18,11 +18,10 @@ from ray.rllib.models.torch.torch_action_dist import TorchCategorical
 from ray.rllib.policy import Policy
 from ray.rllib.policy.rnn_sequencing import pad_batch_to_sequences_of_same_size
 from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.numpy import convert_to_numpy
-from ray.rllib.utils.torch_utils import apply_grad_clipping, sequence_mask
-from ray.rllib.utils.typing import TensorStructType, TensorType
+from ray.rllib.utils.torch_utils import sequence_mask
+from ray.rllib.utils.typing import TensorType
 from torch.func import functional_call, jacrev
 
 from .constants import PreLearningProcessing

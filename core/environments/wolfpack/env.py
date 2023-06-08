@@ -10,11 +10,21 @@ from gymnasium.utils import seeding
 from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
 from ray.rllib.policy.sample_batch import SampleBatch
 
-from ...algorithms.amd.constants import PreLearningProcessing
 from ..base.gridworld import GridWorldBase
-from ..utils import (ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array)
+from ..utils import ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array
 from .agent import WolfpackAgent
-from .constants import (WOLFPACK_ACTIONS, WOLFPACK_AGENT_MAP, WOLFPACK_AGENT_VIEW_TUNE, WOLFPACK_COLOR, WOLFPACK_MAP, WOLFPACK_NO_ENTRY_STATE, WOLFPACK_OBSERVATION_SHAPE, WOLFPACK_ORIENTATION_BOUNDING_BOX, WOLFPACK_ORIENTATION_TUNE, WOLFPACK_STATE_SHAPE)
+from .constants import (
+    WOLFPACK_ACTIONS,
+    WOLFPACK_AGENT_MAP,
+    WOLFPACK_AGENT_VIEW_TUNE,
+    WOLFPACK_COLOR,
+    WOLFPACK_MAP,
+    WOLFPACK_NO_ENTRY_STATE,
+    WOLFPACK_OBSERVATION_SHAPE,
+    WOLFPACK_ORIENTATION_BOUNDING_BOX,
+    WOLFPACK_ORIENTATION_TUNE,
+    WOLFPACK_STATE_SHAPE,
+)
 
 
 class Wolfpack(GridWorldBase):
@@ -222,12 +232,17 @@ class WolfpackEnv(ParallelEnv):
     def reset(
         self,
         seed: Optional[int] = None,
+        return_info: bool = False,
         options: Optional[dict] = None,
     ) -> ObsDict:
         self.seed(seed=seed)
         self.env.reset()
         self.agents = self.possible_agents[:]
-        return self.env.observations(), self.env.infos
+
+        if return_info:
+            return self.env.observations(), self.env.infos
+        else:
+            return self.env.observations()
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]

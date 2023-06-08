@@ -2,7 +2,7 @@ import numpy as np
 from pettingzoo.utils.env import ActionType, AgentID
 
 from core.environments.base.constants import *
-from core.environments.gathering.constants import (GATHERING_MAP_SIZE, GATHERING_NO_ENTRY_STATE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME)
+from core.environments.gathering.constants import GATHERING_MAP_SIZE, GATHERING_NO_ENTRY_STATE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME
 
 from ..base.agent import GridWorldAgentBase
 

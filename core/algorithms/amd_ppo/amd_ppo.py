@@ -1,47 +1,33 @@
+import importlib
 import logging
 import time
-from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union)
-import importlib
+from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 from gymnasium import spaces
 from gymnasium.vector.utils import batch_space, create_empty_array
-from ray.rllib.algorithms.a3c import A3C, A3CConfig
-from ray.rllib.algorithms.algorithm import Algorithm
-from ray.rllib.algorithms.algorithm_config import (AlgorithmConfig, NotProvided, Space, gym)
-from ray.rllib.algorithms.callbacks import DefaultCallbacks, MultiCallbacks
-from ray.rllib.algorithms.pg import PGConfig
+from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided, Space
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
-from ray.rllib.algorithms.ppo.ppo import PPOConfig
-from ray.rllib.env.env_context import EnvContext
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.evaluation.postprocessing import Postprocessing
-from ray.rllib.execution.rollout_ops import (standardize_fields, synchronous_parallel_sample)
-from ray.rllib.execution.train_ops import (multi_gpu_train_one_step, train_one_step)
+from ray.rllib.execution.rollout_ops import standardize_fields, synchronous_parallel_sample
+from ray.rllib.execution.train_ops import multi_gpu_train_one_step, train_one_step
 from ray.rllib.models import ModelCatalog
-from ray.rllib.models.torch.torch_action_dist import TorchDeterministic
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.utils.annotations import ExperimentalAPI, override
-from ray.rllib.utils.deprecation import (DEPRECATED_VALUE, Deprecated, deprecation_warning)
+from ray.rllib.utils.annotations import override
 from ray.rllib.utils.from_config import NotProvided
-from ray.rllib.utils.metrics import (NUM_AGENT_STEPS_SAMPLED, NUM_ENV_STEPS_SAMPLED, SYNCH_WORKER_WEIGHTS_TIMER)
+from ray.rllib.utils.metrics import NUM_AGENT_STEPS_SAMPLED, NUM_ENV_STEPS_SAMPLED, SYNCH_WORKER_WEIGHTS_TIMER
 from ray.rllib.utils.metrics.learner_info import LEARNER_STATS_KEY
-from ray.rllib.utils.typing import (EnvConfigDict, EnvCreator, EnvType, MultiAgentPolicyConfigDict, PolicyID, ResultDict, SampleBatchType)
+from ray.rllib.utils.typing import EnvCreator, EnvType, MultiAgentPolicyConfigDict, PolicyID, ResultDict, SampleBatchType
 from ray.util.debug import log_once
 
-if TYPE_CHECKING:
-    from ray.rllib.core.rl_module import RLModule
-
-from ..amd.action_distribution import (SigmoidTorchDeterministic, TanhTorchDeterministic)
+from ..amd.action_distribution import SigmoidTorchDeterministic, TanhTorchDeterministic
 from ..amd.amd import AMD, AMDConfig
 from ..amd.callback import AMDDefualtCallback
-from ..amd.constants import (CENTRAL_PLANNER, SIGMOID_DETERMINISTIC_DISTRIBUTION, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing)
-from ..amd.utils import (action_to_reward, cumsum_factor_across_eps, get_availability_mask, get_env_example)
+from ..amd.constants import CENTRAL_PLANNER, SIGMOID_DETERMINISTIC_DISTRIBUTION, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing
+from ..amd.utils import action_to_reward, cumsum_factor_across_eps, get_availability_mask, get_env_example
 from ..amd.wrappers import MultiAgentEnvWithCentralPlanner
-
-if TYPE_CHECKING:
-    from ray.rllib.core.rl_module import RLModule
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +50,7 @@ class AMDPPOConfig(PPOConfig):
         self.planner_reward_max: float = 1.0
         self.force_zero_sum: bool = False
         self.planner_reward_cost: float = 0.0
-        self.reward_distribution: str = 'sigmoid'
+        self.reward_distribution: str = 'tanh'
         self.awareness_batch_size: int = None
         self.agent_cooperativeness_stats_fn: Callable = None
         self.neural_awareness_method: str = 'grad'

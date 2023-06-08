@@ -9,7 +9,7 @@ from gymnasium.vector.utils import create_empty_array
 from ray.rllib.env.multi_agent_env import ENV_STATE, MultiAgentEnv
 from ray.rllib.utils.typing import MultiAgentDict
 
-from ..constants import CENTRAL_PLANNER, STATE_SPACE, PreLearningProcessing
+from ..constants import CENTRAL_PLANNER, STATE_SPACE
 
 
 class MultiAgentEnvWithCentralPlanner(MultiAgentEnv):

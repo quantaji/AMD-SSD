@@ -1,13 +1,10 @@
-from abc import ABC
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 from gymnasium import spaces
-from gymnasium.utils import seeding
-from gymnasium.vector.utils import create_empty_array
 from gymnasium.spaces.utils import flatten, flatten_space
 from numpy import ndarray
-from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
+from pettingzoo.utils.env import ActionDict, ObsDict
 
 from .base import SimpleGameEnv
 

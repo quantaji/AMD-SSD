@@ -13,7 +13,7 @@ from typing import List, Tuple
 import numpy as np
 from pettingzoo.utils.env import ActionType, AgentID
 
-from .constants import (ACTION_ORIENTATION_CHANGE, ACTION_POSITION_CHANGE, ORIENTATION_CHANGE)
+from .constants import ACTION_ORIENTATION_CHANGE, ACTION_POSITION_CHANGE, ORIENTATION_CHANGE
 
 
 class GridWorldAgentBase:

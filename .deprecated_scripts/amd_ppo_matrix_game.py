@@ -19,7 +19,7 @@ if module_path not in sys.path:
 # from core.algorithms.amd.amd import AMD, AMDConfig
 from core.algorithms.amd_ppo import AMDPPO, AMDPPOConfig
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
-from core.environments.simple_games.matrix_game import matrix_game_env_creator, coop_stats_fn
+from core.environments.simple_games.matrix_game import matrix_game_env_creator, matrix_game_coop_stats_fn
 
 if __name__ == "__main__":
     ray.init()
@@ -39,7 +39,7 @@ if __name__ == "__main__":
             'fear': 1.0,
             'greed': 1.0,
         },
-        clip_actions=True,
+        # clip_actions=True,
     ).rollouts(
         num_rollout_workers=4,
         rollout_fragment_length=128,
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         # param_assumption='neural',
         # neural_awareness_method='grad',
         awareness_batch_size=32,
-        agent_cooperativeness_stats_fn=coop_stats_fn,
+        agent_cooperativeness_stats_fn=matrix_game_coop_stats_fn,
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
         num_cpus_per_worker=3,

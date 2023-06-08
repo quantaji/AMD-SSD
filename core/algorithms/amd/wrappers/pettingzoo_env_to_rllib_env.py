@@ -14,10 +14,10 @@ class MultiAgentEnvFromPettingZooParallel(MultiAgentEnv):
         self.par_env = env
         self.par_env.reset()
 
-        self.observation_space = spaces.Dict(self.par_env.observation_spaces)
-        self.action_space = spaces.Dict(self.par_env.action_spaces)
-
         self._agent_ids = set(self.par_env.possible_agents)
+
+        self.observation_space = spaces.Dict({agent: self.par_env.observation_space(agent) for agent in self._agent_ids})
+        self.action_space = spaces.Dict({agent: self.par_env.action_space(agent) for agent in self._agent_ids})
 
         # see if state is callable
         try:
@@ -36,7 +36,7 @@ class MultiAgentEnvFromPettingZooParallel(MultiAgentEnv):
         super().__init__()
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        obs, info = self.par_env.reset(seed=seed, options=options)
+        obs, info = self.par_env.reset(seed=seed, options=options, return_info=True)
         return obs, info
 
     def step(self, action_dict):

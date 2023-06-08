@@ -1,5 +1,4 @@
-import logging
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Dict, List
 
 import numpy as np
 import ray
@@ -7,32 +6,27 @@ import torch
 import torch.nn as nn
 from gymnasium import spaces
 from numpy import ndarray
-from ray.rllib.algorithms.a3c.a3c_torch_policy import A3CTorchPolicy
 from ray.rllib.algorithms.ppo.ppo_tf_policy import validate_config
-from ray.rllib.algorithms.ppo.ppo_torch_policy import PPOTorchPolicy
-from ray.rllib.evaluation import Episode
-from ray.rllib.evaluation.episode import Episode
-from ray.rllib.evaluation.postprocessing import (Postprocessing, compute_gae_for_sample_batch)
+from ray.rllib.evaluation.postprocessing import Postprocessing
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.models.modelv2 import ModelV2
-from ray.rllib.models.torch import torch_modelv2
-from ray.rllib.models.torch.torch_action_dist import (TorchCategorical, TorchDistributionWrapper)
+from ray.rllib.models.torch.torch_action_dist import TorchCategorical
 from ray.rllib.policy import Policy
 from ray.rllib.policy.rnn_sequencing import pad_batch_to_sequences_of_same_size
 from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.policy.torch_mixins import (EntropyCoeffSchedule, KLCoeffMixin, LearningRateSchedule, ValueNetworkMixin)
+from ray.rllib.policy.torch_mixins import EntropyCoeffSchedule, KLCoeffMixin, LearningRateSchedule, ValueNetworkMixin
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.utils.annotations import DeveloperAPI, override
 from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.numpy import convert_to_numpy
-from ray.rllib.utils.torch_utils import (apply_grad_clipping, explained_variance, sequence_mask, warn_if_infinite_kl_divergence)
-from ray.rllib.utils.typing import AgentID, TensorStructType, TensorType
+from ray.rllib.utils.torch_utils import apply_grad_clipping, explained_variance, sequence_mask, warn_if_infinite_kl_divergence
+from ray.rllib.utils.typing import TensorType
 from torch.autograd import grad
 from torch.func import functional_call, jacrev
 
 from ..amd.amd_torch_policy import AMDAgentTorchPolicy, AMDGeneralPolicy
 from ..amd.constants import PreLearningProcessing
-from ..amd.utils import (action_to_reward, chunk_batch_to_batch, cumsum_factor_across_eps)
+from ..amd.utils import action_to_reward, chunk_batch_to_batch, cumsum_factor_across_eps
 
 torch, nn = try_import_torch()
 

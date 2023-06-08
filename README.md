@@ -40,7 +40,7 @@ pip3 install -r requirements.txt --cache-dir ${SCRATCH}/pip_cache
 ## Local setup
 On local machine, to install this exact python version I use conda (you can also use venv).
 ```sh
-conda create --name=forl-proj python=3.10.4
+conda create --name=forl-proj python=3.10
 # activate
 conda activate forl-proj
 # deactivate

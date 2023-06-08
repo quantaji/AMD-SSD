@@ -1,17 +1,14 @@
-from builtins import breakpoint
-from dataclasses import replace
-from importlib.metadata import metadata
-from typing import (Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar)
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pygame
 import torch
 from gymnasium import spaces
 from gymnasium.utils import seeding
-from pettingzoo.utils.env import (ActionDict, ActionType, AgentID, ObsDict, ObsType, ParallelEnv)
+from pettingzoo.utils.env import ActionDict, AgentID, ObsDict, ParallelEnv
 from ray.rllib.policy.sample_batch import SampleBatch
 
-from core.environments.utils import (ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array)
+from core.environments.utils import ascii_array_to_rgb_array, ascii_dict_to_color_array, ascii_list_to_array
 
 from ...algorithms.amd.constants import PreLearningProcessing
 from ..base.gridworld import GridWorldBase
@@ -22,7 +19,6 @@ from .constants import (
     GATHERING_AGENT_VIEW_TUNE,
     GATHERING_APPLE_NO_ENTRY_STATE,
     GATHERING_APPLE_NUMBER,
-    GATHERING_BEAM_PLAYER_STATE,
     GATHERING_COLOR,
     GATHERING_MAP,
     GATHERING_MAP_SIZE,
@@ -312,8 +308,8 @@ class GatheringEnv(ParallelEnv):
 
         self.agents = self.possible_agents[:]
 
-        if self.convert_to_rllib_env:
-            return self.env.observations(), {}  # in format of observation and info
+        if return_info:
+            return self.env.observations(), self.env.infos  # in format of observation and info
         else:
             return self.env.observations()
 

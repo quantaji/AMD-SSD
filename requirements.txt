@@ -2,30 +2,21 @@
 --extra-index-url https://download.pytorch.org/whl/cu118
 torch==2.0.0
 
-## Tensorflow, this is only needed for getting codes running, our code will be completely on pytorch, the version should be determined by rayc
-tensorflow
-tensorflow-probability
-
 ## RL libs
 ray[rllib]==2.3.1
 ray[default]==2.3.1 # for cluster running
-gymnasium # gymnasium is used by ray, its version depends on ray
-pettingzoo # another package for multi-agent-rl, both pettingzoo and gymnasium is maintained by Farama-Foundation
-# minigrid # another farama's package for easy implementing grid-world games
-# tianshou # this is another RL training framework, more light-weighted than rllib
-## PS: pytorch lighning is not an ideal RL training framework we should not use this, rllib have its own trainner.
-supersuit # normalization wrappers
+gymnasium==0.26.3
+pettingzoo==1.22.1
+supersuit==3.7.0 # normalization wrappers
+numpy
 
 # environment related
-pygame
+pygame==2.1.2
 
 # others, for visualization and others
-numpy
-scipy
 matplotlib
 tqdm
 tensorboard
 jupyterlab
-pandas
-opencv-python # for rendering video
+opencv-python
 gputil
