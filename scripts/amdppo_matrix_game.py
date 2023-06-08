@@ -2,17 +2,9 @@ import argparse
 import os
 import sys
 
-import gymnasium as gym
-import numpy as np
 import ray
-import supersuit as ss
-import torch
-from gymnasium import spaces
 from ray import tune
-from ray.rllib.models import ModelCatalog
-from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.tune.registry import register_env
-from torch import nn
 
 module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
@@ -183,7 +175,7 @@ def main(args):
         rollout_fragment_length=args.batch_size,
     ).debugging(log_level="ERROR").framework(framework="torch").resources(
         num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-        num_cpus_per_worker=2,
+        num_cpus_per_worker=1,
     )
 
     tune.run(

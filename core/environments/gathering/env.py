@@ -18,7 +18,6 @@ from .constants import (
     GATHERING_AGENT_MAP,
     GATHERING_AGENT_VIEW_TUNE,
     GATHERING_APPLE_NO_ENTRY_STATE,
-    GATHERING_APPLE_NUMBER,
     GATHERING_COLOR,
     GATHERING_MAP,
     GATHERING_MAP_SIZE,
@@ -45,7 +44,8 @@ class Gathering(GridWorldBase):
     line_width = 0
     ## Can try to add more players
     agents = ['blue_p', 'red_p']
-    apple_number = GATHERING_APPLE_NUMBER
+
+    # apple_number = GATHERING_APPLE_NUMBER
 
     def _baseworld_with_apple(self, base_world):
         ## Call it every time when using base world
@@ -63,12 +63,21 @@ class Gathering(GridWorldBase):
         randomizer: np.random.Generator,
         max_cycles: int = 1024,
         apple_respawn: int = 1,
+        apple_number: int = 3,
+        player_blood: int = 1,
+        tagged_time_number: int = 5,
+        r_starv: float = -0.01,
     ):
         self.agent_dict = {}
         self.apple_dict = {}
 
+        self.apple_number = apple_number
+        self.tagged_time_number = tagged_time_number
+        self.player_blood = player_blood
+        self.r_starv = r_starv
+
         for agent in self.agents:
-            self.agent_dict[agent] = GatheringAgent(agent)
+            self.agent_dict[agent] = GatheringAgent(agent, tagged_time_number=self.tagged_time_number, player_blood=self.player_blood)
 
         ## in config dict: time for apple respawn
         self.apple_respawn = apple_respawn
@@ -246,10 +255,14 @@ class Gathering(GridWorldBase):
         self.num_frames += 1
 
         # test termination and calc reward
+        # MOD: reward is just reward at this time
         for agent_key, agent in self.agent_dict.items():
             posi = agent.position
             if grid_world[posi[0], posi[1]] == 'C':
-                self.rewards[agent_key] = agent.apple_eaten
+                #self.rewards[agent_key] = agent.apple_eaten
+                self.rewards[agent_key] = 1
+            else:
+                self.rewards[agent_key] = self.r_starv
         if self.num_frames >= self.max_cycles:
             self.truncations = dict(zip(self.agents, [True] * len(self.agents)))
 
@@ -288,7 +301,7 @@ class GatheringEnv(ParallelEnv):
         for agent_key in self.possible_agents:
             self.action_spaces[agent_key] = spaces.Discrete(len(GATHERING_ACTIONS))
 
-        self.state_space = spaces.Box(low=0, high=255, shape=self.state_shape, dtype=np.uint8)
+        self.state_space = spaces.Box(low=0.0, high=1.0, shape=self.state_shape, dtype=np.float32)
 
         self.convert_to_rllib_env: bool = False
 
@@ -317,7 +330,7 @@ class GatheringEnv(ParallelEnv):
         return self.observation_spaces[agent]
 
     def state(self) -> np.ndarray:
-        return ascii_array_to_rgb_array(self.env.grid_world, self.env.ascii_color_array)
+        return ascii_array_to_rgb_array(self.env.grid_world, self.env.ascii_color_array).astype(np.float32) / 255
 
     def action_space(self, agent):
         return self.action_spaces[agent]
@@ -346,25 +359,37 @@ class GatheringEnv(ParallelEnv):
         return self.env.render()
 
 
-def gathring_env_creator(config: Dict[str, Any] = {
+def gathering_env_creator(config: Dict[str, Any] = {
     'max_cycles': 1240,
     'apple_respawn': 3,
+    'apple_number': 3,
+    'player_blood': 1,
+    'tagged_time_number': 5,
+    'r_starv': -0.01,
 }) -> GatheringEnv:
     env = GatheringEnv(
         max_cycles=config['max_cycles'],
         apple_respawn=config['apple_respawn'],
+        apple_number=config['apple_number'],
+        player_blood=config['player_blood'],
+        tagged_time_number=config['tagged_time_number'],
+        r_starv=config['r_starv'],
     )
     env.convert_to_rllib_env = True
     return env
 
 
 gathering_env_default_config: Dict[str, Any] = {
-    'max_cycles': 1240,
+    'max_cycles': 1024,
     'apple_respawn': 3,
+    'apple_number': 3,
+    'player_blood': 1,
+    'tagged_time_number': 5,
+    'r_starv': -0.01,
 }
 
 
-def gathering_coop_stats_fn(sample_batch: SampleBatch, coop_reward: float) -> float:
+def gathering_coop_stats_fn(sample_batch: SampleBatch) -> float:
     avail = sample_batch[PreLearningProcessing.AVAILABILITY]
     if isinstance(avail, torch.Tensor):
         avail = avail.detach().cpu().numpy()

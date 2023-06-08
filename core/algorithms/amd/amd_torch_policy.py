@@ -122,6 +122,7 @@ class AMDAgentTorchPolicy(AMDGeneralPolicy, A3CTorchPolicy):
             # Since the default class is agent, we only have to pass a r_planner term
             sample_batch[PreLearningProcessing.R_PLANNER_CUM] = 0 * sample_batch[SampleBatch.REWARDS]
             sample_batch[PreLearningProcessing.AWARENESS] = 0 * sample_batch[SampleBatch.REWARDS]
+            sample_batch[PreLearningProcessing.AVAILABILITY] = 0 * sample_batch[SampleBatch.REWARDS]
         else:
             sample_batch[SampleBatch.OBS] = sample_batch[SampleBatch.NEXT_OBS]  # shift back
 

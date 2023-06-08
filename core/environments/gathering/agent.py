@@ -1,8 +1,7 @@
 import numpy as np
 from pettingzoo.utils.env import ActionType, AgentID
 
-from core.environments.base.constants import *
-from core.environments.gathering.constants import GATHERING_MAP_SIZE, GATHERING_NO_ENTRY_STATE, GATHERING_PLAYER_BLOOD, GATHERING_TAGGED_TIME
+from core.environments.gathering.constants import GATHERING_MAP_SIZE, GATHERING_NO_ENTRY_STATE
 
 from ..base.agent import GridWorldAgentBase
 
@@ -12,7 +11,7 @@ class GatheringAgent(GridWorldAgentBase):
     no_entry_grid_state_list = GATHERING_NO_ENTRY_STATE
     map_x, map_y = GATHERING_MAP_SIZE
 
-    def __init__(self, agent_id: AgentID) -> None:
+    def __init__(self, agent_id: AgentID, tagged_time_number, player_blood) -> None:
         super().__init__(agent_id)
         #self.orientation(0)
         #self.position(pos=np.random.randint(low=[0,0], high=[GATHERING_MAP_SIZE], size=(2,)))
@@ -22,6 +21,8 @@ class GatheringAgent(GridWorldAgentBase):
         self.tagged_time = 0
         self.apple_eaten = 0
         self.is_agent = False  # Agent=blue, other=red; Is needed?
+        self.tagged_time_number = tagged_time_number
+        self.player_blood = player_blood
 
     def _reset(self):
         self.using_beam = False
@@ -50,11 +51,11 @@ class GatheringAgent(GridWorldAgentBase):
 
     def get_hit(self):
         self.num_hit_by_beam += 1
-        if self.num_hit_by_beam >= GATHERING_PLAYER_BLOOD:
+        if self.num_hit_by_beam >= self.player_blood:
             self.num_hit_by_beam = 0
             self.using_beam = False
             self.is_tagged = True
-            self.tagged_time = GATHERING_TAGGED_TIME
+            self.tagged_time = self.tagged_time_number
 
     def recover(self):
         if self.tagged_time == 1:

@@ -46,7 +46,7 @@ class AMDPPOConfig(PPOConfig):
         self.central_planner_lr = None
         self.cp_model = None
         self.coop_agent_list = None
-        self.param_assumption: str = 'neural'
+        self.param_assumption: str = 'softmax'
         self.planner_reward_max: float = 1.0
         self.force_zero_sum: bool = False
         self.planner_reward_cost: float = 0.0

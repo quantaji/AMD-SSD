@@ -123,12 +123,28 @@ GATHERING_COLOR.update({
 
 ## USER CONFIGURATIONS
 GATHERING_FPS = 5
-GATHERING_RESOLUTION = [1120, 640]  # [width, hight]
-GATHERING_MAP_SIZE = (35, 20)
-GATHERING_PLAYER_BLOOD = 2
-GATHERING_TAGGED_TIME = 2
-GATHERING_APPLE_NUMBER = 3
-## 30*20 map
+GATHERING_RESOLUTION = [640, 480]  # [width, hight]
+GATHERING_MAP_SIZE = (20, 15)
+## 20*15 map
+GATHERING_MAP = [
+    '@@@@@@@@@@@@@@@@@@@@',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@                  @',
+    '@@@@@@@@@@@@@@@@@@@@',
+]
+## 35*20
+'''
 GATHERING_MAP = [
     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
     '@@@@@                   @@@@@@@@@@@',
@@ -151,6 +167,7 @@ GATHERING_MAP = [
     '@@                               @@',
     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
 ]
+'''
 ''' 50*30 map
 GATHERING_MAP = [
     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',

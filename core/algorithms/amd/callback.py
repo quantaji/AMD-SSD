@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from gymnasium import spaces
 from ray.rllib.algorithms.algorithm import Algorithm
@@ -27,6 +29,8 @@ class AMDDefualtCallback(DefaultCallbacks):
             appearance_mask_unflattened[agent_id] = (agent_id in algorithm.config['coop_agent_list'] or (algorithm.config['coop_agent_list'] is None))
         algorithm.appearance: np.ndarray = spaces.flatten(algorithm.reward_space_unflattened, appearance_mask_unflattened).astype(bool)  # shape of (n_agent, )
         # remember to send it to central planner's policy when doing a training step
+
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:2" # rllib use :4096:8 which is wrong...
 
     def on_create_policy(self, *, policy_id: PolicyID, policy: TorchPolicyV2) -> None:
 

@@ -406,7 +406,7 @@ class AMDPPOAgentTorchPolicy(
                             pg_params += batch_pg[i]
 
                 for batch in batch_slices:
-                    batch_awareness = np.zeros_like(batch[SampleBatch.REWARDS], dtype=np.float).reshape(-1)
+                    batch_awareness = np.zeros_like(batch[SampleBatch.REWARDS], dtype=float).reshape(-1)
                     batch_size = batch_awareness.shape[0]
 
                     copied_batch, valid_mask = get_copied_batch_and_mask(batch)

@@ -291,6 +291,7 @@ def wolfpack_env_creator(config: Dict[str, Any] = {
         r_prey=config['r_prey'],
         r_starv=config['r_starv'],
         max_cycles=config['max_cycles'],
+        coop_radius=config['coop_radius'],
     )
     return env
 
