@@ -482,9 +482,24 @@ class AMDPPOAgentTorchPolicy(
             )  # this funciton computes the observation's hash
 
             # big matrix, we should work on cpu
-            M = (jac_logp_s @ jac_logp_s.T) * (obs_hash.reshape(1, -1) == obs_hash.reshape(-1, 1))
             total_adv = sample_batch[PreLearningProcessing.TOTAL_ADVANTAGES].reshape(-1, 1)
-            awareness = (M @ total_adv).reshape(-1)
+
+            batch_size = obs_hash.shape[0]
+
+            if not self.config['awareness_batch_size']:
+                batch_indices = [np.arange(batch_size)]
+            else:
+                batch_indices = np.split(np.arange(batch_size), np.arange((batch_size - 1) // self.config['awareness_batch_size'])[1:] * self.config['awareness_batch_size'])
+
+            awareness = []
+            for batch_index in batch_indices:
+                batch_obs_hash = obs_hash[batch_index]
+                batch_jac_logp_s = jac_logp_s[batch_index]
+                temp = (batch_obs_hash.reshape(-1, 1) == obs_hash.reshape(1, -1)) @ (total_adv * jac_logp_s)
+                batch_awareness = (temp * batch_jac_logp_s).sum(-1)
+                awareness.append(batch_awareness)
+
+            awareness = np.concatenate(awareness)
 
         else:
             raise ValueError("The current policy parameterization assumption {} is not supported!!!".format(self.config['policy_param']))

@@ -26,7 +26,6 @@ if __name__ == "__main__":
     os.environ['RLLIB_NUM_GPUS'] = '1'
 
     # real setting
-    # this setting is ok for option neural, but for softmax, it takes all memory
     n_env = 16 
     n_worker = 6
     length = 1024
