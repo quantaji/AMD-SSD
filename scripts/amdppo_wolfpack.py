@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument(
         "--env_max_len",
         type=int,
-        default=768,
+        default=640,
         help="maximum time step in one episode emulation of env.",
     )
     parser.add_argument(
@@ -113,7 +113,7 @@ def parse_args():
     parser.add_argument(
         "--aware_batch_size",
         type=int,
-        default=1024,
+        default=768,
         help="Batch size for calculation awareness, for saving memory. None means single batch.",
     )
     parser.add_argument(
@@ -134,11 +134,24 @@ def parse_args():
         default=False,
         help="Whether to use cumulated reward (original amd paper), or q-value adjustment.",
     )
+    parser.add_argument(
+        "--ray-address",
+        help="Address of Ray cluster for seamless distributed execution.",
+    )
+    parser.add_argument(
+        "--server-address",
+        type=str,
+        default=None,
+        required=False,
+        help="The address of server to connect to if using Ray Client.",
+    )
     args = parser.parse_args()
     return args
 
 
 def main(args):
+
+    tmp_dir = os.getenv('ray_temp_dir') or os.path.join(str(os.getenv('SCRATCH')), '.tmp_ray')
 
     ray.init()
 

@@ -5,13 +5,13 @@
 #SBATCH --time=10:00
 
 ### This script works for any number of nodes, Ray will find and manage all resources
-#SBATCH --nodes=1
+#SBATCH --nodes=3
 
 ### Give all resources to a single Ray task, ray can manage the resources internally
-#SBATCH --ntasks=6
+#SBATCH --ntasks=8
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
-#SBATCH --gpus=rtx_2080_ti:1
+#SBATCH --gpus-per-node=rtx_2080_ti:1
 
 ### storage
 #SBATCH --tmp=4G
@@ -60,16 +60,23 @@ export ip_head
 echo "IP Head: $ip_head"
 
 echo "STARTING HEAD at $head_node"
-srun --nodes=1 --ntasks=1 -w $head_node ray start --head --node-ip-address=$head_node_ip --port=$port --redis-password=$redis_password --temp-dir $ray_temp_dir --block --disable-usage-stats &
+srun --nodes=1 --ntasks=1 -w $head_node \
+    ray start --head --node-ip-address=$head_node_ip --port=$port \
+    --redis-password=$redis_password --temp-dir $ray_temp_dir \
+    --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus "${SLURM_GPUS_PER_TASK}" --block \
+    --disable-usage-stats &
+sleep 10
 # __doc_head_ray_end__
 
 # __doc_worker_ray_start__
-# optional, though may be useful in certain versions of Ray < 1.0.
-sleep 10
-worker_num=$(($SLURM_NTASKS - 2)) # number of nodes other than the head node
+worker_num=$(($SLURM_JOB_NUM_NODES - 1)) # number of nodes other than the head node
 for ((i = 1; i <= $worker_num; i++)); do
-    echo "STARTING WORKER $i at $head_node"
-    srun --nodes=1 --ntasks=1 -w $head_node ray start --address $ip_head --redis-password=$redis_password --temp-dir $ray_temp_dir --block --disable-usage-stats &
+    node_i=${nodes_array[$i]}
+    echo "STARTING WORKER $i at $node_i"
+    srun --nodes=1 --ntasks=1 -w $node_i \
+        ray start --address $ip_head \
+        --redis-password=$redis_password --temp-dir $ray_temp_dir --block \
+        --disable-usage-stats &
     sleep 5
 done
 # __doc_worker_ray_end__

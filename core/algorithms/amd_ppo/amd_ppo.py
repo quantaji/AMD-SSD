@@ -4,6 +4,7 @@ import time
 from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
+import torch
 from gymnasium import spaces
 from gymnasium.vector.utils import batch_space, create_empty_array
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided, Space
@@ -25,7 +26,12 @@ from ray.util.debug import log_once
 from ..amd.action_distribution import SigmoidTorchDeterministic, TanhTorchDeterministic
 from ..amd.amd import AMD, AMDConfig
 from ..amd.callback import AMDDefualtCallback
-from ..amd.constants import CENTRAL_PLANNER, SIGMOID_DETERMINISTIC_DISTRIBUTION, TANH_DETERMINISTIC_DISTRIBUTION, PreLearningProcessing
+from ..amd.constants import (
+    CENTRAL_PLANNER,
+    SIGMOID_DETERMINISTIC_DISTRIBUTION,
+    TANH_DETERMINISTIC_DISTRIBUTION,
+    PreLearningProcessing,
+)
 from ..amd.utils import action_to_reward, cumsum_factor_across_eps, get_availability_mask, get_env_example
 from ..amd.wrappers import MultiAgentEnvWithCentralPlanner
 
@@ -237,6 +243,8 @@ class AMDPPO(PPO):
     @override(PPO)
     def training_step(self) -> ResultDict:
 
+        torch.cuda.empty_cache()
+
         # Collect SampleBatches from sample workers until we have a full batch.
         if self.config.count_steps_by == "agent_steps":
             train_batch = synchronous_parallel_sample(
@@ -256,6 +264,7 @@ class AMDPPO(PPO):
 
         # NOTE: this is the start of my own code
         # for conviniency
+        torch.cuda.empty_cache()
         worker = self.workers.local_worker()
         policy_map = worker.policy_map
 
@@ -265,6 +274,7 @@ class AMDPPO(PPO):
         # ! ALL the Pre-learning processing happens here
         if train_batch.agent_steps() > 0 and self.config['planner_reward_max'] > 0.0:
             train_batch = self.prelearning_process_trajectory(train_batch)
+        torch.cuda.empty_cache()
         # NOTE: this is the end of my own code
 
         # Train
