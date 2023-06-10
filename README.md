@@ -43,7 +43,23 @@ conda activate forl-proj
 conda deactivate
 ```
 
-# Tips for using LSF or Slurm
+## Submit jobs on Euler/ Slurm
+
+You can first edit the resources needed in `start-ray.sbatch` file, and submit jobs by
+```shell
+# command
+echo "$(cat start-ray-nodes.sbatch; echo command_to_submit_jobs )" > temp && sbatch < temp && rm temp
+# command from file
+echo "$(cat start-ray-nodes.sbatch file_of_job )" > temp && sbatch < temp && rm temp
+```
+
+For example
+
+```shell
+echo "$(cat start-ray-nodes.sbatch exp_scripts/wolfpack/amd-qadj-delay_model-conv_assump-neural.bash)" > temp && sbatch < temp && rm temp
+```
+
+### Tips for using LSF or Slurm
 There are some links here 
 - [Migration from LSF to SLURM](https://scicomp.ethz.ch/wiki/LSF_to_Slurm_quick_reference)
 - [How to use GPU](https://scicomp.ethz.ch/wiki/Getting_started_with_GPUs)
@@ -52,7 +68,7 @@ Most importantly, [this](https://scicomp.ethz.ch/public/lsla/index2.html) intera
 
 
 
-## Ray on SLURM
+### Ray on SLURM
 See the following link:
 - https://docs.ray.io/en/latest/cluster/vms/user-guides/community/slurm.html#slurm-network-ray
 - https://docs.ray.io/en/latest/cluster/vms/user-guides/community/slurm-basic.html

@@ -1,4 +1,4 @@
-~/.conda/envs/forl-proj/bin/python scripts/amdppo_gathering.py \
+python scripts/amdppo_gathering.py \
     --cp_r_max 0.05 \
     --exp_name "amd-cum-r-delay_model-lstm_assump-softmax" \
     --model "lstm" \

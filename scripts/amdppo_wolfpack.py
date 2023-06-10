@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import ray
@@ -39,7 +40,7 @@ def parse_args():
     parser.add_argument(
         "--exp_dir",
         type=str,
-        default='~/forl-exp/',
+        default=os.path.join(os.environ.get('SCRATCH', str(Path.home())), 'forl-exp'),
         help="Path to store experiment results. The folder of this experiment is 'exp_dir/env_name/exp_name/'",
     )
     parser.add_argument(
@@ -57,13 +58,13 @@ def parse_args():
     parser.add_argument(
         "--env_max_len",
         type=int,
-        default=640,
+        default=1024,
         help="maximum time step in one episode emulation of env.",
     )
     parser.add_argument(
         "--timestep",
         type=int,
-        default=10000000,
+        default=14155776,
         help="Total time step to train",
     )
     parser.add_argument(
@@ -151,9 +152,10 @@ def parse_args():
 
 def main(args):
 
-    tmp_dir = os.getenv('ray_temp_dir') or os.path.join(str(os.getenv('SCRATCH')), '.tmp_ray')
-
-    ray.init()
+    ray.init(
+        address='auto',
+        _redis_password=os.environ.get('redis_password', ""),
+    )
 
     os.environ['RLLIB_NUM_GPUS'] = '1'  # to use gpu
 
@@ -248,6 +250,13 @@ def main(args):
         num_cpus_per_worker=1,
     )
 
+    if not args.debug:
+        local_dir = os.path.join(args.exp_dir, env_name)
+    else:
+        local_dir = os.path.join(os.environ.get('SCRATCH', str(Path.home())), 'ray_debug', env_name)
+
+    print("local dir: ", local_dir)
+
     tune.run(
         AMDPPO,
         name=args.exp_name,
@@ -256,7 +265,7 @@ def main(args):
         },
         keep_checkpoints_num=1,
         checkpoint_freq=4,
-        local_dir=os.path.join(args.exp_dir, env_name) if not args.debug else os.path.join('~/ray_debug', env_name),
+        local_dir=local_dir,
         config=config.to_dict(),
     )
 
