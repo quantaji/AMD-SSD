@@ -246,7 +246,7 @@ def main(args):
         log_level="ERROR",
         seed=args.seed,
     ).framework(framework="torch").resources(
-        num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
+        num_gpus=1,
         num_cpus_per_worker=1,
     )
 
@@ -267,6 +267,7 @@ def main(args):
         checkpoint_freq=4,
         local_dir=local_dir,
         config=config.to_dict(),
+        resume="LOCAL+ERRORED",
     )
 
 

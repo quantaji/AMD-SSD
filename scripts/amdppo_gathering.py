@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import ray
@@ -14,7 +15,7 @@ if module_path not in sys.path:
 
 from core.algorithms.amd.wrappers import MultiAgentEnvFromPettingZooParallel as P2M
 from core.algorithms.amd_ppo import AMDPPO, AMDPPOConfig
-from core.environments.gathering import gathering_env_creator, gathering_coop_stats_fn
+from core.environments.gathering import gathering_coop_stats_fn, gathering_env_creator
 
 
 def parse_args():
@@ -39,7 +40,7 @@ def parse_args():
     parser.add_argument(
         "--exp_dir",
         type=str,
-        default='~/forl-exp/',
+        default=os.path.join(os.environ.get('SCRATCH', str(Path.home())), 'forl-exp'),
         help="Path to store experiment results. The folder of this experiment is 'exp_dir/env_name/exp_name/'",
     )
     parser.add_argument(
@@ -113,7 +114,7 @@ def parse_args():
     parser.add_argument(
         "--aware_batch_size",
         type=int,
-        default=1024,
+        default=768,
         help="Batch size for calculation awareness, for saving memory. None means single batch.",
     )
     parser.add_argument(
@@ -134,13 +135,27 @@ def parse_args():
         default=False,
         help="Whether to use cumulated reward (original amd paper), or q-value adjustment.",
     )
+    parser.add_argument(
+        "--ray-address",
+        help="Address of Ray cluster for seamless distributed execution.",
+    )
+    parser.add_argument(
+        "--server-address",
+        type=str,
+        default=None,
+        required=False,
+        help="The address of server to connect to if using Ray Client.",
+    )
     args = parser.parse_args()
     return args
 
 
 def main(args):
 
-    ray.init()
+    ray.init(
+        address='auto',
+        _redis_password=os.environ.get('redis_password', ""),
+    )
 
     os.environ['RLLIB_NUM_GPUS'] = '1'  # to use gpu
 
@@ -151,7 +166,7 @@ def main(args):
     batch_size = n_env * max(1, n_worker) * length
     aware_bs = max(length, args.aware_batch_size) if args.aware_batch_size else None
 
-    env_name = 'wolfpack'
+    env_name = 'gathering'
     register_env(env_name, lambda config: P2M(ss.normalize_obs_v0(ss.dtype_v0(
         gathering_env_creator(config),
         np.float32,
@@ -228,9 +243,16 @@ def main(args):
         log_level="ERROR",
         seed=args.seed,
     ).framework(framework="torch").resources(
-        num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
+        num_gpus=1,
         num_cpus_per_worker=1,
     )
+
+    if not args.debug:
+        local_dir = os.path.join(args.exp_dir, env_name)
+    else:
+        local_dir = os.path.join(os.environ.get('SCRATCH', str(Path.home())), 'ray_debug', env_name)
+
+    print("local dir: ", local_dir)
 
     tune.run(
         AMDPPO,
@@ -240,8 +262,9 @@ def main(args):
         },
         keep_checkpoints_num=1,
         checkpoint_freq=4,
-        local_dir=os.path.join(args.exp_dir, env_name) if not args.debug else os.path.join('~/ray_debug', env_name),
+        local_dir=local_dir,
         config=config.to_dict(),
+        resume="LOCAL+ERRORED",
     )
 
 

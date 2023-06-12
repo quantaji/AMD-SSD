@@ -11,7 +11,7 @@
 #SBATCH --ntasks=2
 #SBATCH --cpus-per-task=6
 #SBATCH --mem-per-cpu=8G
-#SBATCH --gpus-per-node=rtx_2080_ti:1
+#SBATCH --gpus-per-node=rtx_3090:1
 
 # Load modules or your own conda environment here
 module load gcc/8.2.0 python_gpu/3.10.4 cuda/11.8.0 git-lfs/2.3.0 git/2.31.1 eth_proxy cudnn/8.8.1.3
@@ -48,7 +48,7 @@ fi
 # __doc_head_address_end__
 
 # __doc_head_ray_start__
-port=6379
+port=$((6379 + $RANDOM % 100))
 ip_head=$head_node_ip:$port
 export ip_head
 echo "IP Head: $ip_head"
@@ -58,7 +58,7 @@ srun --nodes=1 --ntasks=1 -w $head_node \
     ray start --head --node-ip-address=$head_node_ip --port=$port \
     --redis-password=$redis_password \
     --block --disable-usage-stats &
-sleep 10
+sleep 30
 # __doc_head_ray_end__
 
 # __doc_worker_ray_start__
