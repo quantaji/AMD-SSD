@@ -267,7 +267,6 @@ def main(args):
         checkpoint_freq=4,
         local_dir=local_dir,
         config=config.to_dict(),
-        resume="LOCAL+ERRORED",
     )
 
 
