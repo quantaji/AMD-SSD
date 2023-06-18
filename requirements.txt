@@ -20,3 +20,6 @@ tensorboard
 jupyterlab
 opencv-python
 gputil
+pandas
+seaborn
+tbparse

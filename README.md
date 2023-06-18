@@ -5,6 +5,8 @@ This is the code for project of cource Foundations of Reinforcement Learning (Fo
   - migrating to higher version of `ray` needs additional effort
 - Two RL environments, Wolfpack and Gathering. [[original paper]](https://arxiv.org/abs/1702.03037)
 
+For further information, please refer to our [report](https://www.overleaf.com/read/nqnprygyhqkf).
+
 # Instruction for local and Euler environment setup
 I decide to use Python 3.10.4 and CUDA 11.8 as standard version. This is the default version on Euler.
 

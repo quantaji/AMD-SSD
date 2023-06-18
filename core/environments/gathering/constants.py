@@ -1,7 +1,17 @@
 from ..base.constants import BASE_ACTIONS, BASE_GRID_COLOR, BASE_GRID_STATE, ORIENTATION_CHANGE
 
 GATHERING_STATE = BASE_GRID_STATE.copy()
-GATHERING_STATE.update({'U': 'blue_p', 'V': 'red_p', 'W': 'two players at same position', 'S': 'agent self', 'O': 'opponent', 'P': 'apple', 'F': 'beam and player', 'B': 'beam', 'C': 'apple and player'})
+GATHERING_STATE.update({
+    'U': 'blue_p',
+    'V': 'red_p',
+    'W': 'two players at same position',
+    'S': 'agent self',
+    'O': 'opponent',
+    'P': 'apple',
+    'F': 'beam and player',
+    'B': 'beam',
+    'C': 'apple and player',
+})
 GATHERING_AGENT_MAP = {
     'blue_p': 'U',
     'red_p': 'V',
@@ -9,7 +19,7 @@ GATHERING_AGENT_MAP = {
 }
 GATHERING_AGENT_VIEW_TUNE = {
     'blue_p': {
-        'U': 'S',
+        'U': 'S',139.162.82.217https://www.linode.com/speed-test/
         'V': 'O',
         'P': 'P',
     },
